@@ -23,7 +23,7 @@ Claude Code 内で以下を実行:
 
 ```
 /plugin marketplace add taichi0529/grok-plugin
-/plugin install grok@grok-plugin
+/plugin install grok-cc@grok-plugin
 ```
 
 ### ローカル開発
@@ -35,20 +35,20 @@ git clone https://github.com/taichi0529/grok-plugin.git
 claude --plugin-dir /path/to/grok-plugin
 ```
 
-インストール後、`/grok:setup` で Grok CLI のインストール・認証状態を確認できる。
+インストール後、`/grok-cc:setup` で Grok CLI のインストール・認証状態を確認できる。
 
 ## コマンド
 
 | コマンド | 内容 |
 |---|---|
-| `/grok:setup` | Grok CLI の状態確認。`--enable-review-gate` で停止時レビューゲートを有効化 |
-| `/grok:rescue <task>` | 調査・修正タスクを Grok に委譲(`grok-rescue` サブエージェント経由) |
-| `/grok:review` | ローカル git 変更の標準レビュー(構造化 JSON 出力) |
-| `/grok:adversarial-review [focus]` | 設計・前提を攻撃する敵対的レビュー |
-| `/grok:status [job-id]` | このリポジトリのジョブ一覧・詳細 |
-| `/grok:result [job-id]` | 完了ジョブの最終出力 |
-| `/grok:cancel [job-id]` | 実行中ジョブのキャンセル |
-| `/grok:transfer` | 現在の Claude セッションを Grok セッションとしてインポート(`grok import`) |
+| `/grok-cc:setup` | Grok CLI の状態確認。`--enable-review-gate` で停止時レビューゲートを有効化 |
+| `/grok-cc:rescue <task>` | 調査・修正タスクを Grok に委譲(`grok-rescue` サブエージェント経由) |
+| `/grok-cc:review` | ローカル git 変更の標準レビュー(構造化 JSON 出力) |
+| `/grok-cc:adversarial-review [focus]` | 設計・前提を攻撃する敵対的レビュー |
+| `/grok-cc:status [job-id]` | このリポジトリのジョブ一覧・詳細 |
+| `/grok-cc:result [job-id]` | 完了ジョブの最終出力 |
+| `/grok-cc:cancel [job-id]` | 実行中ジョブのキャンセル |
+| `/grok-cc:transfer` | 現在の Claude セッションを Grok セッションとしてインポート(`grok import`) |
 
 ## アーキテクチャ
 

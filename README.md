@@ -23,7 +23,7 @@ Inside Claude Code, run:
 
 ```
 /plugin marketplace add taichi0529/grok-plugin
-/plugin install grok@grok-plugin
+/plugin install grok-cc@grok-plugin
 ```
 
 ### Local development
@@ -35,20 +35,20 @@ git clone https://github.com/taichi0529/grok-plugin.git
 claude --plugin-dir /path/to/grok-plugin
 ```
 
-After installation, run `/grok:setup` to verify that the Grok CLI is installed and authenticated.
+After installation, run `/grok-cc:setup` to verify that the Grok CLI is installed and authenticated.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `/grok:setup` | Check Grok CLI status. `--enable-review-gate` enables the stop-time review gate |
-| `/grok:rescue <task>` | Delegate an investigation or fix task to Grok (via the `grok-rescue` subagent) |
-| `/grok:review` | Standard review of local git changes (structured JSON output) |
-| `/grok:adversarial-review [focus]` | Adversarial review that attacks design choices and assumptions |
-| `/grok:status [job-id]` | List or inspect jobs for this repository |
-| `/grok:result [job-id]` | Show the final output of a finished job |
-| `/grok:cancel [job-id]` | Cancel a running job |
-| `/grok:transfer` | Import the current Claude session into Grok (`grok import`) |
+| `/grok-cc:setup` | Check Grok CLI status. `--enable-review-gate` enables the stop-time review gate |
+| `/grok-cc:rescue <task>` | Delegate an investigation or fix task to Grok (via the `grok-rescue` subagent) |
+| `/grok-cc:review` | Standard review of local git changes (structured JSON output) |
+| `/grok-cc:adversarial-review [focus]` | Adversarial review that attacks design choices and assumptions |
+| `/grok-cc:status [job-id]` | List or inspect jobs for this repository |
+| `/grok-cc:result [job-id]` | Show the final output of a finished job |
+| `/grok-cc:cancel [job-id]` | Cancel a running job |
+| `/grok-cc:transfer` | Import the current Claude session into Grok (`grok import`) |
 
 ## Architecture
 

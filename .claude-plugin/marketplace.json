@@ -9,7 +9,7 @@
   },
   "plugins": [
     {
-      "name": "grok",
+      "name": "grok-cc",
       "description": "Use Grok from Claude Code to review code or delegate tasks.",
       "version": "0.1.0",
       "author": {

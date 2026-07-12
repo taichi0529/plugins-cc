@@ -292,7 +292,7 @@ function spawnGrokTurn(cwd, args, onProgress) {
     let stdoutRemainder = "";
     let stderr = "";
 
-    // /grok:cancel terminates this Node process; the grok child is not in the
+    // /grok-cc:cancel terminates this Node process; the grok child is not in the
     // job record, so forward the signal or it would keep running unattended.
     const forwardTermination = () => {
       try {
@@ -356,7 +356,7 @@ export async function runGrokTurn(cwd, options = {}) {
   const availability = getGrokAvailability(cwd);
   if (!availability.available) {
     throw new Error(
-      "Grok CLI is not installed. Install it with `curl -fsSL https://x.ai/cli/install.sh | bash`, then rerun `/grok:setup`."
+      "Grok CLI is not installed. Install it with `curl -fsSL https://x.ai/cli/install.sh | bash`, then rerun `/grok-cc:setup`."
     );
   }
 
@@ -427,7 +427,7 @@ export async function importClaudeSession(cwd, options = {}) {
   const availability = getGrokAvailability(cwd);
   if (!availability.available) {
     throw new Error(
-      "Grok CLI is not installed. Install it with `curl -fsSL https://x.ai/cli/install.sh | bash`, then rerun `/grok:setup`."
+      "Grok CLI is not installed. Install it with `curl -fsSL https://x.ai/cli/install.sh | bash`, then rerun `/grok-cc:setup`."
     );
   }
   if (!options.sourcePath) {

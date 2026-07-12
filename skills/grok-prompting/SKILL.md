@@ -6,7 +6,7 @@ user-invocable: false
 
 # Grok 4.5 Prompting
 
-Use this skill when `grok:grok-rescue` needs to ask Grok or another Grok 4.5-based workflow for help.
+Use this skill when `grok-cc:grok-rescue` needs to ask Grok or another Grok 4.5-based workflow for help.
 
 Prompt Grok like an operator, not a collaborator. Keep prompts compact and block-structured with XML tags. State the task, the output contract, the follow-through defaults, and the small set of extra constraints that matter.
 

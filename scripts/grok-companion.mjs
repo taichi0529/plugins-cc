@@ -193,7 +193,7 @@ async function buildSetupReport(cwd, actionsTaken = []) {
     nextSteps.push("If browser login is blocked, retry with `!grok login --device-auth`, or set `XAI_API_KEY` for API-key auth.");
   }
   if (!config.stopReviewGate) {
-    nextSteps.push("Optional: run `/grok:setup --enable-review-gate` to require a fresh review before stop.");
+    nextSteps.push("Optional: run `/grok-cc:setup --enable-review-gate` to require a fresh review before stop.");
   }
 
   return {
@@ -249,14 +249,14 @@ function buildReviewPrompt(reviewName, context, focusText) {
 function ensureGrokAvailable(cwd) {
   const availability = getGrokAvailability(cwd);
   if (!availability.available) {
-    throw new Error("Grok CLI is not installed or is missing required runtime support. Install it with `curl -fsSL https://x.ai/cli/install.sh | bash`, then rerun `/grok:setup`.");
+    throw new Error("Grok CLI is not installed or is missing required runtime support. Install it with `curl -fsSL https://x.ai/cli/install.sh | bash`, then rerun `/grok-cc:setup`.");
   }
 }
 
 function validateStandardReviewRequest(target, focusText) {
   if (focusText.trim()) {
     throw new Error(
-      `\`/grok:review\` runs the standard review contract and does not support custom focus text. Retry with \`/grok:adversarial-review ${focusText.trim()}\` for focused review instructions.`
+      `\`/grok-cc:review\` runs the standard review contract and does not support custom focus text. Retry with \`/grok-cc:adversarial-review ${focusText.trim()}\` for focused review instructions.`
     );
   }
 }
@@ -319,7 +319,7 @@ async function resolveLatestTrackedTaskThread(cwd, options = {}) {
   const visibleJobs = filterJobsForCurrentClaudeSession(jobs);
   const activeTask = visibleJobs.find((job) => job.jobClass === "task" && (job.status === "queued" || job.status === "running"));
   if (activeTask) {
-    throw new Error(`Task ${activeTask.id} is still running. Use /grok:status before continuing it.`);
+    throw new Error(`Task ${activeTask.id} is still running. Use /grok-cc:status before continuing it.`);
   }
 
   const trackedTask = findLatestResumableTaskJob(visibleJobs);
@@ -494,7 +494,7 @@ function buildTaskRunMetadata({ prompt, resumeLast = false }) {
 }
 
 function renderQueuedTaskLaunch(payload) {
-  return `${payload.title} started in the background as ${payload.jobId}. Check /grok:status ${payload.jobId} for progress.\n`;
+  return `${payload.title} started in the background as ${payload.jobId}. Check /grok-cc:status ${payload.jobId} for progress.\n`;
 }
 
 function getJobKindLabel(kind, jobClass) {

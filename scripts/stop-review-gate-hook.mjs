@@ -63,7 +63,7 @@ function buildSetupNote(cwd) {
   }
 
   const detail = availability.detail ? ` ${availability.detail}.` : "";
-  return `Grok is not set up for the review gate.${detail} Run /grok:setup.`;
+  return `Grok is not set up for the review gate.${detail} Run /grok-cc:setup.`;
 }
 
 function parseStopReviewOutput(rawOutput) {
@@ -72,7 +72,7 @@ function parseStopReviewOutput(rawOutput) {
     return {
       ok: false,
       reason:
-        "The stop-time Grok review task returned no final output. Run /grok:review --wait manually or bypass the gate."
+        "The stop-time Grok review task returned no final output. Run /grok-cc:review --wait manually or bypass the gate."
     };
   }
 
@@ -91,7 +91,7 @@ function parseStopReviewOutput(rawOutput) {
   return {
     ok: false,
     reason:
-      "The stop-time Grok review task returned an unexpected answer. Run /grok:review --wait manually or bypass the gate."
+      "The stop-time Grok review task returned an unexpected answer. Run /grok-cc:review --wait manually or bypass the gate."
   };
 }
 
@@ -117,7 +117,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Grok review task timed out after 15 minutes. Run /grok:review --wait manually or bypass the gate."
+        "The stop-time Grok review task timed out after 15 minutes. Run /grok-cc:review --wait manually or bypass the gate."
     };
   }
 
@@ -127,7 +127,7 @@ function runStopReview(cwd, input = {}) {
       ok: false,
       reason: detail
         ? `The stop-time Grok review task failed: ${detail}`
-        : "The stop-time Grok review task failed. Run /grok:review --wait manually or bypass the gate."
+        : "The stop-time Grok review task failed. Run /grok-cc:review --wait manually or bypass the gate."
     };
   }
 
@@ -138,7 +138,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Grok review task returned invalid JSON. Run /grok:review --wait manually or bypass the gate."
+        "The stop-time Grok review task returned invalid JSON. Run /grok-cc:review --wait manually or bypass the gate."
     };
   }
 }
@@ -152,7 +152,7 @@ function main() {
   const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot), input));
   const runningJob = jobs.find((job) => job.status === "queued" || job.status === "running");
   const runningTaskNote = runningJob
-    ? `Grok task ${runningJob.id} is still running. Check /grok:status and use /grok:cancel ${runningJob.id} if you want to stop it before ending the session.`
+    ? `Grok task ${runningJob.id} is still running. Check /grok-cc:status and use /grok-cc:cancel ${runningJob.id} if you want to stop it before ending the session.`
     : null;
 
   if (!config.stopReviewGate) {

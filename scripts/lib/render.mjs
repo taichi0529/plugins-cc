@@ -111,9 +111,9 @@ function appendActiveJobsTable(lines, jobs) {
   lines.push("| Job | Kind | Status | Phase | Elapsed | Grok Session ID | Summary | Actions |");
   lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const job of jobs) {
-    const actions = [`/grok:status ${job.id}`];
+    const actions = [`/grok-cc:status ${job.id}`];
     if (job.status === "queued" || job.status === "running") {
-      actions.push(`/grok:cancel ${job.id}`);
+      actions.push(`/grok-cc:cancel ${job.id}`);
     }
     lines.push(
       `| ${escapeMarkdownCell(job.id)} | ${escapeMarkdownCell(job.kindLabel)} | ${escapeMarkdownCell(job.status)} | ${escapeMarkdownCell(job.phase ?? "")} | ${escapeMarkdownCell(job.elapsed ?? "")} | ${escapeMarkdownCell(job.threadId ?? "")} | ${escapeMarkdownCell(job.summary ?? "")} | ${actions.map((action) => `\`${action}\``).join("<br>")} |`
@@ -146,14 +146,14 @@ function pushJobDetails(lines, job, options = {}) {
     lines.push(`  Log: ${job.logFile}`);
   }
   if ((job.status === "queued" || job.status === "running") && options.showCancelHint) {
-    lines.push(`  Cancel: /grok:cancel ${job.id}`);
+    lines.push(`  Cancel: /grok-cc:cancel ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && options.showResultHint) {
-    lines.push(`  Result: /grok:result ${job.id}`);
+    lines.push(`  Result: /grok-cc:result ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && job.jobClass === "task" && job.write && options.showReviewHint) {
-    lines.push("  Review changes: /grok:review --wait");
-    lines.push("  Stricter review: /grok:adversarial-review --wait");
+    lines.push("  Review changes: /grok-cc:review --wait");
+    lines.push("  Stricter review: /grok-cc:adversarial-review --wait");
   }
   if (job.progressPreview?.length) {
     lines.push("  Progress:");
@@ -431,7 +431,7 @@ export function renderCancelReport(job) {
   if (job.summary) {
     lines.push(`- Summary: ${job.summary}`);
   }
-  lines.push("- Check `/grok:status` for the updated queue.");
+  lines.push("- Check `/grok-cc:status` for the updated queue.");
 
   return `${lines.join("\n").trimEnd()}\n`;
 }

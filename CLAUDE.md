@@ -22,7 +22,7 @@ node scripts/grok-companion.mjs status --json
 ## アーキテクチャ
 
 - `commands/*.md` → すべて `scripts/grok-companion.mjs <subcommand>` を呼ぶ薄いラッパー。出力は verbatim でユーザーに返す規約
-- `agents/grok-rescue.md` → `/grok:rescue` から Agent tool 経由で起動される転送専用サブエージェント。`task` サブコマンドを 1 回だけ呼ぶ
+- `agents/grok-rescue.md` → `/grok-cc:rescue` から Agent tool 経由で起動される転送専用サブエージェント。`task` サブコマンドを 1 回だけ呼ぶ
 - `scripts/grok-companion.mjs` → ジョブのライフサイクル管理(queued/running/completed、フォアグラウンド/`task-worker` による detached バックグラウンド)
 - `scripts/lib/grok.mjs` → Grok CLI 接続層。**ここだけが grok プロセスを起動する**。1 ターン = `grok --cwd <dir> --sandbox <profile> --always-approve --output-format streaming-json [-p|--resume] ...` の一発実行。streaming-json のイベントは `{type: thought|text|error|end}`、`end` に `sessionId`(= threadId)と `structuredOutput` が載る
 - `scripts/lib/state.mjs` → ジョブ状態の永続化。`CLAUDE_PLUGIN_DATA` 配下(なければ tmpdir/grok-companion)。ジョブは Claude セッション ID(`GROK_COMPANION_SESSION_ID`、SessionStart フックが export)でフィルタされる
@@ -33,7 +33,7 @@ node scripts/grok-companion.mjs status --json
 
 - app-server / broker 層は存在しない。grok はターンごとの one-shot プロセス。`getSessionRuntimeStatus` は常に direct を返す
 - ターンの interrupt RPC はない。キャンセル = プロセスツリーの terminate
-- `/grok:review` も敵対レビューと同じくプロンプトベース(codex の built-in reviewer 相当は grok にない)。focus テキスト拒否の仕様は codex 版と合わせて維持
+- `/grok-cc:review` も敵対レビューと同じくプロンプトベース(codex の built-in reviewer 相当は grok にない)。focus テキスト拒否の仕様は codex 版と合わせて維持
 - `--resume-last` は companion が記録した threadId(= grok sessionId)のみから解決する。`findLatestTaskThread` は常に null(無関係なセッションを誤って resume しないため)
 - 書き込みタスクの touchedFiles は git status の前後差分で算出
 - モデルエイリアス: `fast` → `grok-composer-2.5-fast`。effort は `none..xhigh` に加えて `max` を受け付ける

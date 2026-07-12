@@ -4,8 +4,8 @@ argument-hint: "[--background|--wait] [--resume|--fresh] [--model <model|fast>] 
 allowed-tools: Bash(node:*), AskUserQuestion, Agent
 ---
 
-Invoke the `grok:grok-rescue` subagent via the `Agent` tool (`subagent_type: "grok:grok-rescue"`), forwarding the raw user request as the prompt.
-`grok:grok-rescue` is a subagent, not a skill — do not call `Skill(grok:grok-rescue)` (no such skill) or `Skill(grok:rescue)` (that re-enters this command and hangs the session). The command runs inline so the `Agent` tool stays in scope; forked general-purpose subagents do not expose it.
+Invoke the `grok-cc:grok-rescue` subagent via the `Agent` tool (`subagent_type: "grok-cc:grok-rescue"`), forwarding the raw user request as the prompt.
+`grok-cc:grok-rescue` is a subagent, not a skill — do not call `Skill(grok-cc:grok-rescue)` (no such skill) or `Skill(grok-cc:rescue)` (that re-enters this command and hangs the session). The command runs inline so the `Agent` tool stays in scope; forked general-purpose subagents do not expose it.
 The final user-visible response must be Grok's output verbatim.
 
 Raw user request:
@@ -13,8 +13,8 @@ $ARGUMENTS
 
 Execution mode:
 
-- If the request includes `--background`, run the `grok:grok-rescue` subagent in the background.
-- If the request includes `--wait`, run the `grok:grok-rescue` subagent in the foreground.
+- If the request includes `--background`, run the `grok-cc:grok-rescue` subagent in the background.
+- If the request includes `--wait`, run the `grok-cc:grok-rescue` subagent in the foreground.
 - If neither flag is present, default to foreground.
 - `--background` and `--wait` are execution flags for Claude Code. Do not forward them to `task`, and do not treat them as part of the natural-language task text.
 - `--model` and `--effort` are runtime-selection flags. Preserve them for the forwarded `task` call, but do not treat them as part of the natural-language task text.
@@ -41,9 +41,9 @@ Operating rules:
 - The subagent is a thin forwarder only. It should use one `Bash` call to invoke `node "${CLAUDE_PLUGIN_ROOT}/scripts/grok-companion.mjs" task ...` and return that command's stdout as-is.
 - Return the Grok companion stdout verbatim to the user.
 - Do not paraphrase, summarize, rewrite, or add commentary before or after it.
-- Do not ask the subagent to inspect files, monitor progress, poll `/grok:status`, fetch `/grok:result`, call `/grok:cancel`, summarize output, or do follow-up work of its own.
+- Do not ask the subagent to inspect files, monitor progress, poll `/grok-cc:status`, fetch `/grok-cc:result`, call `/grok-cc:cancel`, summarize output, or do follow-up work of its own.
 - Leave `--effort` unset unless the user explicitly asks for a specific reasoning effort.
 - Leave the model unset unless the user explicitly asks for one. If they ask for `fast`, map it to `grok-composer-2.5-fast`.
 - Leave `--resume` and `--fresh` in the forwarded request. The subagent handles that routing when it builds the `task` command.
-- If the helper reports that Grok is missing or unauthenticated, stop and tell the user to run `/grok:setup`.
+- If the helper reports that Grok is missing or unauthenticated, stop and tell the user to run `/grok-cc:setup`.
 - If the user did not supply a request, ask what Grok should investigate or fix.
