@@ -1,40 +1,69 @@
 # Grok plugin for Claude Code
 
-Use the [Grok CLI](https://x.ai) (xAI のエージェント型コーディング CLI) を Claude Code から呼び出すプラグイン。OpenAI の [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc) の派生物で、バックエンドを `codex app-server` から `grok` headless モードに置き換えたもの。
+[日本語版 README はこちら](README.ja.md)
 
-## 必要なもの
+Call the [Grok CLI](https://x.ai) (xAI's agentic coding CLI) from Claude Code. This is a derivative of OpenAI's [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc), with the backend ported from `codex app-server` to `grok` headless mode.
+
+## Requirements
 
 - Node.js
-- Grok CLI (`curl -fsSL https://x.ai/cli/install.sh | bash`)
-- `grok login` 済みであること(または `XAI_API_KEY`)
+- Grok CLI:
 
-## コマンド
+  ```bash
+  curl -fsSL https://x.ai/cli/install.sh | bash
+  ```
 
-| コマンド | 内容 |
+- Authentication: run `grok login` once (or set `XAI_API_KEY`)
+
+## Installation
+
+### From the marketplace (recommended)
+
+Inside Claude Code, run:
+
+```
+/plugin marketplace add taichi0529/grok-plugin
+/plugin install grok@grok-plugin
+```
+
+### Local development
+
+Clone the repository and load it directly:
+
+```bash
+git clone https://github.com/taichi0529/grok-plugin.git
+claude --plugin-dir /path/to/grok-plugin
+```
+
+After installation, run `/grok:setup` to verify that the Grok CLI is installed and authenticated.
+
+## Commands
+
+| Command | Description |
 |---|---|
-| `/grok:setup` | Grok CLI の状態確認。`--enable-review-gate` で停止時レビューゲートを有効化 |
-| `/grok:rescue <task>` | 調査・修正タスクを Grok に委譲(`grok-rescue` サブエージェント経由) |
-| `/grok:review` | ローカル git 変更の標準レビュー(構造化 JSON 出力) |
-| `/grok:adversarial-review [focus]` | 設計・前提を攻撃する敵対的レビュー |
-| `/grok:status [job-id]` | このリポジトリのジョブ一覧・詳細 |
-| `/grok:result [job-id]` | 完了ジョブの最終出力 |
-| `/grok:cancel [job-id]` | 実行中ジョブのキャンセル |
-| `/grok:transfer` | 現在の Claude セッションを Grok セッションとしてインポート(`grok import`) |
+| `/grok:setup` | Check Grok CLI status. `--enable-review-gate` enables the stop-time review gate |
+| `/grok:rescue <task>` | Delegate an investigation or fix task to Grok (via the `grok-rescue` subagent) |
+| `/grok:review` | Standard review of local git changes (structured JSON output) |
+| `/grok:adversarial-review [focus]` | Adversarial review that attacks design choices and assumptions |
+| `/grok:status [job-id]` | List or inspect jobs for this repository |
+| `/grok:result [job-id]` | Show the final output of a finished job |
+| `/grok:cancel [job-id]` | Cancel a running job |
+| `/grok:transfer` | Import the current Claude session into Grok (`grok import`) |
 
-## アーキテクチャ
+## Architecture
 
-- `scripts/grok-companion.mjs` — すべてのコマンドの実体。ジョブ管理(フォアグラウンド/バックグラウンド)、レビュー、タスク委譲を行う
-- `scripts/lib/grok.mjs` — Grok CLI 接続層。`grok -p <prompt> --output-format streaming-json` を 1 ターンとして実行し、`--resume <session-id>` でスレッド継続、`--json-schema` で構造化出力を得る
-- レビューは `prompts/review.md` / `prompts/adversarial-review.md` のテンプレートに git diff コンテキストを埋め込み、`schemas/review-output.schema.json` に適合する JSON を受け取る
-- 書き込み系タスクは `--sandbox workspace`、レビュー・調査は `--sandbox read-only` で実行
-- ジョブ状態は `CLAUDE_PLUGIN_DATA`(未設定時は tmpdir の `grok-companion/`)配下に保存
+- `scripts/grok-companion.mjs` — the engine behind every command: job management (foreground / background), reviews, and task delegation
+- `scripts/lib/grok.mjs` — the Grok CLI layer. One turn = one `grok -p <prompt> --output-format streaming-json` run; threads continue via `--resume <session-id>`, structured output via `--json-schema`
+- Reviews embed git diff context into the `prompts/review.md` / `prompts/adversarial-review.md` templates and receive JSON conforming to `schemas/review-output.schema.json`
+- Write-capable tasks run with `--sandbox workspace`; reviews and investigations with `--sandbox read-only`
+- Job state is stored under `CLAUDE_PLUGIN_DATA` (falls back to `grok-companion/` in the tmpdir)
 
-## モデルとエフォート
+## Models and effort
 
-- モデル未指定時は Grok CLI のデフォルト(例: `grok-4.5`)
-- `--model fast` は `grok-composer-2.5-fast` のエイリアス
-- `--effort` は `none|minimal|low|medium|high|xhigh|max`
+- With no model specified, the Grok CLI default is used (e.g. `grok-4.5`)
+- `--model fast` is an alias for `grok-composer-2.5-fast`
+- `--effort` accepts `none|minimal|low|medium|high|xhigh|max`
 
-## ライセンス
+## License
 
-Apache License 2.0。本プラグインは OpenAI Codex plugin for Claude Code の派生物です(NOTICE を参照)。
+Apache License 2.0. This plugin is a derivative work of the OpenAI Codex plugin for Claude Code (see NOTICE).

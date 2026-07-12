@@ -1,0 +1,21 @@
+{
+  "name": "grok-plugin",
+  "owner": {
+    "name": "Taichi"
+  },
+  "metadata": {
+    "description": "Grok plugin to use in Claude Code for delegation and code review.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "grok",
+      "description": "Use Grok from Claude Code to review code or delegate tasks.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Taichi"
+      },
+      "source": "./"
+    }
+  ]
+}
