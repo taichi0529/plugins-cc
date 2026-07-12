@@ -97,7 +97,7 @@ function diffTouchedFiles(cwd, before, after, startedAtMs) {
   if (!before || !after) {
     return [];
   }
-  return [...after].filter((file) => {
+  const touched = [...after].filter((file) => {
     if (!before.has(file)) {
       return true;
     }
@@ -109,6 +109,14 @@ function diffTouchedFiles(cwd, before, after, startedAtMs) {
       return true;
     }
   });
+  for (const file of before) {
+    // Present before but gone after: the run deleted the file or fully
+    // reverted a pre-existing change.
+    if (!after.has(file)) {
+      touched.push(file);
+    }
+  }
+  return touched;
 }
 
 export function getGrokAvailability(cwd) {

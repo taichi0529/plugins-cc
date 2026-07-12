@@ -102,10 +102,14 @@ function runStopReview(cwd, input = {}) {
     ...process.env,
     ...(input.session_id ? { [SESSION_ID_ENV]: input.session_id } : {})
   };
-  const result = spawnSync(process.execPath, [scriptPath, "task", "--json", prompt], {
+  // The prompt embeds the previous Claude response. Pass it over stdin so no
+  // argv-parsing path can ever reinterpret its content (e.g. `--write`) as
+  // task options.
+  const result = spawnSync(process.execPath, [scriptPath, "task", "--json"], {
     cwd,
     env: childEnv,
     encoding: "utf8",
+    input: prompt,
     timeout: STOP_REVIEW_TIMEOUT_MS
   });
 
