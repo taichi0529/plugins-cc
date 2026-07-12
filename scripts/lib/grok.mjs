@@ -10,6 +10,8 @@
  * @typedef {((update: string | { message: string, phase: string | null, threadId?: string | null, turnId?: string | null, stderrMessage?: string | null, logTitle?: string | null, logBody?: string | null }) => void)} ProgressReporter
  */
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
 import { readJsonFile } from "./fs.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
@@ -91,11 +93,22 @@ function gitChangedFiles(cwd) {
   );
 }
 
-function diffTouchedFiles(before, after) {
+function diffTouchedFiles(cwd, before, after, startedAtMs) {
   if (!before || !after) {
     return [];
   }
-  return [...after].filter((file) => !before.has(file));
+  return [...after].filter((file) => {
+    if (!before.has(file)) {
+      return true;
+    }
+    // Already-dirty files stay in both sets even when the run edits them
+    // again, so fall back to the modification time to catch re-edits.
+    try {
+      return fs.lstatSync(path.join(cwd, file)).mtimeMs >= startedAtMs;
+    } catch {
+      return true;
+    }
+  });
 }
 
 export function getGrokAvailability(cwd) {
@@ -352,6 +365,9 @@ export async function runGrokTurn(cwd, options = {}) {
   }
 
   const filesBefore = sandboxProfile === "workspace" ? gitChangedFiles(cwd) : null;
+  // 1s margin so filesystems with coarse mtime granularity don't miss edits
+  // that land in the same second the run starts.
+  const startedAtMs = Date.now() - 1000;
   const { capture, exitCode, stderr } = await spawnGrokTurn(
     cwd,
     buildGrokArgs(cwd, { ...options, prompt }),
@@ -377,7 +393,7 @@ export async function runGrokTurn(cwd, options = {}) {
       ? { message: stderr.trim() || `grok exited with code ${exitCode} before finishing the turn.` }
       : null;
 
-  const touchedFiles = filesBefore ? diffTouchedFiles(filesBefore, gitChangedFiles(cwd)) : [];
+  const touchedFiles = filesBefore ? diffTouchedFiles(cwd, filesBefore, gitChangedFiles(cwd), startedAtMs) : [];
 
   return {
     status: failed ? 1 : 0,

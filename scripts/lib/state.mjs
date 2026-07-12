@@ -111,14 +111,71 @@ export function saveState(cwd, state) {
     removeFileIfExists(job.logFile);
   }
 
-  fs.writeFileSync(resolveStateFile(cwd), `${JSON.stringify(nextState, null, 2)}\n`, "utf8");
+  const stateFile = resolveStateFile(cwd);
+  const tempFile = `${stateFile}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, `${JSON.stringify(nextState, null, 2)}\n`, "utf8");
+  fs.renameSync(tempFile, stateFile);
   return nextState;
 }
 
+const LOCK_RETRY_INTERVAL_MS = 25;
+const LOCK_ACQUIRE_TIMEOUT_MS = 5000;
+const LOCK_STALE_MS = 15000;
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withStateLock(cwd, fn) {
+  ensureStateDir(cwd);
+  const lockDir = path.join(resolveStateDir(cwd), "state.lock");
+  const deadline = Date.now() + LOCK_ACQUIRE_TIMEOUT_MS;
+  let locked = false;
+
+  while (!locked) {
+    try {
+      fs.mkdirSync(lockDir);
+      locked = true;
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        throw error;
+      }
+      try {
+        if (Date.now() - fs.statSync(lockDir).mtimeMs > LOCK_STALE_MS) {
+          fs.rmdirSync(lockDir);
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > deadline) {
+        // Proceeding unlocked risks a lost update; deadlocking every command
+        // on a leaked lock is worse.
+        break;
+      }
+      sleepSync(LOCK_RETRY_INTERVAL_MS);
+    }
+  }
+
+  try {
+    return fn();
+  } finally {
+    if (locked) {
+      try {
+        fs.rmdirSync(lockDir);
+      } catch {
+        // Already removed as a stale lock.
+      }
+    }
+  }
+}
+
 export function updateState(cwd, mutate) {
-  const state = loadState(cwd);
-  mutate(state);
-  return saveState(cwd, state);
+  return withStateLock(cwd, () => {
+    const state = loadState(cwd);
+    mutate(state);
+    return saveState(cwd, state);
+  });
 }
 
 export function generateJobId(prefix = "job") {

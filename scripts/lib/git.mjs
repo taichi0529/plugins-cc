@@ -198,9 +198,14 @@ function formatUntrackedFile(cwd, relativePath) {
   const absolutePath = path.join(cwd, relativePath);
   let stat;
   try {
-    stat = fs.statSync(absolutePath);
+    stat = fs.lstatSync(absolutePath);
   } catch {
     return `### ${relativePath}\n(skipped: broken symlink or unreadable file)`;
+  }
+  if (stat.isSymbolicLink()) {
+    // Following the link could pull files from outside the repository
+    // (e.g. credentials) into the review context sent to the model.
+    return `### ${relativePath}\n(skipped: symbolic link)`;
   }
   if (stat.isDirectory()) {
     return `### ${relativePath}\n(skipped: directory)`;
