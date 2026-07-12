@@ -22,8 +22,8 @@ Call the [Grok CLI](https://x.ai) (xAI's agentic coding CLI) from Claude Code. T
 Inside Claude Code, run:
 
 ```
-/plugin marketplace add taichi0529/grok-plugin
-/plugin install grok-cc@grok-plugin
+/plugin marketplace add taichi0529/grok-cc
+/plugin install grok-cc@grok-cc
 ```
 
 ### Local development
@@ -31,8 +31,8 @@ Inside Claude Code, run:
 Clone the repository and load it directly:
 
 ```bash
-git clone https://github.com/taichi0529/grok-plugin.git
-claude --plugin-dir /path/to/grok-plugin
+git clone https://github.com/taichi0529/grok-cc.git
+claude --plugin-dir /path/to/grok-cc
 ```
 
 After installation, run `/grok-cc:setup` to verify that the Grok CLI is installed and authenticated.

@@ -22,8 +22,8 @@
 Claude Code 内で以下を実行:
 
 ```
-/plugin marketplace add taichi0529/grok-plugin
-/plugin install grok-cc@grok-plugin
+/plugin marketplace add taichi0529/grok-cc
+/plugin install grok-cc@grok-cc
 ```
 
 ### ローカル開発
@@ -31,8 +31,8 @@ Claude Code 内で以下を実行:
 リポジトリを clone して直接読み込む:
 
 ```bash
-git clone https://github.com/taichi0529/grok-plugin.git
-claude --plugin-dir /path/to/grok-plugin
+git clone https://github.com/taichi0529/grok-cc.git
+claude --plugin-dir /path/to/grok-cc
 ```
 
 インストール後、`/grok-cc:setup` で Grok CLI のインストール・認証状態を確認できる。
