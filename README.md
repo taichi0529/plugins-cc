@@ -23,7 +23,7 @@ Inside Claude Code, run:
 
 ```
 /plugin marketplace add taichi0529/grok-cc
-/plugin install grok-cc@grok-cc
+/plugin install grok-cc@taichi0529
 ```
 
 ### Local development
