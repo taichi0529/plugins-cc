@@ -22,7 +22,7 @@ Call the [Grok CLI](https://x.ai) (xAI's agentic coding CLI) from Claude Code. T
 Inside Claude Code, run:
 
 ```
-/plugin marketplace add taichi0529/grok-cc
+/plugin marketplace add taichi0529/plugins-cc
 /plugin install grok-cc@taichi0529
 ```
 
@@ -31,9 +31,11 @@ Inside Claude Code, run:
 Clone the repository and load it directly:
 
 ```bash
-git clone https://github.com/taichi0529/grok-cc.git
-claude --plugin-dir /path/to/grok-cc
+git clone https://github.com/taichi0529/plugins-cc.git
+claude --plugin-dir /path/to/plugins-cc/plugins/grok-cc
 ```
+
+The repository is a plugin marketplace: each plugin lives under `plugins/<name>/`, so point `--plugin-dir` at the plugin directory, not the repository root.
 
 After installation, run `/grok-cc:setup` to verify that the Grok CLI is installed and authenticated.
 
@@ -212,8 +214,8 @@ Typical usage:
 Every slash command ultimately runs (or is built around) `scripts/grok-companion.mjs`. You can call it directly for debugging or automation:
 
 ```bash
-node scripts/grok-companion.mjs <subcommand> [options]
-node scripts/grok-companion.mjs help
+node plugins/grok-cc/scripts/grok-companion.mjs <subcommand> [options]
+node plugins/grok-cc/scripts/grok-companion.mjs help
 ```
 
 ### Subcommands
@@ -241,7 +243,7 @@ Shared options used by many subcommands:
 ### `task` options (detail)
 
 ```bash
-node scripts/grok-companion.mjs task \
+node plugins/grok-cc/scripts/grok-companion.mjs task \
   [--background] [--write] \
   [--resume-last|--resume|--fresh] \
   [--model <model|fast>] [-m <model|fast>] \
@@ -266,8 +268,8 @@ Without a prompt, a prompt file, piped stdin, or `--resume-last`/`--resume`, `ta
 ### `review` / `adversarial-review` options (detail)
 
 ```bash
-node scripts/grok-companion.mjs review [--wait|--background] [--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--json]
-node scripts/grok-companion.mjs adversarial-review [...] [focus text]
+node plugins/grok-cc/scripts/grok-companion.mjs review [--wait|--background] [--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--json]
+node plugins/grok-cc/scripts/grok-companion.mjs adversarial-review [...] [focus text]
 ```
 
 Notes:
@@ -313,6 +315,8 @@ Configured in `hooks/hooks.json`:
 Enable/disable the gate with `/grok-cc:setup --enable-review-gate` or `--disable-review-gate`. The gate uses a dedicated prompt (`prompts/stop-review-gate.md`) and a 15-minute timeout.
 
 ## Architecture
+
+Paths below are relative to the plugin directory `plugins/grok-cc/`.
 
 - `scripts/grok-companion.mjs` — the engine behind every command: job management (foreground / detached background via `task-worker`), reviews, and task delegation
 - `scripts/lib/grok.mjs` — the Grok CLI layer. One turn = one `grok --cwd … --sandbox … --always-approve --output-format streaming-json` run (`-p` or `--resume`); threads continue via `--resume <session-id>`; structured output via `--json-schema`
