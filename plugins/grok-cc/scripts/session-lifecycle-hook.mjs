@@ -9,7 +9,12 @@ import { TRANSCRIPT_PATH_ENV } from "./lib/claude-session-transfer.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
 export const SESSION_ID_ENV = "GROK_COMPANION_SESSION_ID";
-const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
+const PLUGIN_DATA_ENV = "GROK_COMPANION_DATA";
+// Exporting the generic CLAUDE_PLUGIN_DATA session-wide collides with sibling
+// plugins forked from the same codebase (codex) — last SessionStart hook wins
+// and both companions then share one state dir. Export under the
+// plugin-specific name instead; the generic name stays hook-local.
+const HOOK_PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
 
 function readHookInput() {
   const raw = fs.readFileSync(0, "utf8").trim();
@@ -63,7 +68,7 @@ function cleanupSessionJobs(cwd, sessionId) {
 function handleSessionStart(input) {
   appendEnvVar(SESSION_ID_ENV, input.session_id);
   appendEnvVar(TRANSCRIPT_PATH_ENV, input.transcript_path);
-  appendEnvVar(PLUGIN_DATA_ENV, process.env[PLUGIN_DATA_ENV]);
+  appendEnvVar(PLUGIN_DATA_ENV, process.env[HOOK_PLUGIN_DATA_ENV]);
 }
 
 function handleSessionEnd(input) {

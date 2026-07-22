@@ -27,7 +27,7 @@ node plugins/grok-cc/scripts/grok-companion.mjs status --json
 - `agents/grok-rescue.md` → `/grok-cc:rescue` から Agent tool 経由で起動される転送専用サブエージェント。`task` サブコマンドを 1 回だけ呼ぶ
 - `scripts/grok-companion.mjs` → ジョブのライフサイクル管理(queued/running/completed、フォアグラウンド/`task-worker` による detached バックグラウンド)
 - `scripts/lib/grok.mjs` → Grok CLI 接続層。**ここだけが grok プロセスを起動する**。1 ターン = `grok --cwd <dir> --sandbox <profile> --always-approve --output-format streaming-json [-p|--resume] ...` の一発実行。streaming-json のイベントは `{type: thought|text|error|end}`、`end` に `sessionId`(= threadId)と `structuredOutput` が載る
-- `scripts/lib/state.mjs` → ジョブ状態の永続化。`CLAUDE_PLUGIN_DATA` 配下(なければ tmpdir/grok-companion)。ジョブは Claude セッション ID(`GROK_COMPANION_SESSION_ID`、SessionStart フックが export)でフィルタされる
+- `scripts/lib/state.mjs` → ジョブ状態の永続化。`GROK_COMPANION_DATA` 配下(SessionStart フックが export。無ければフック実行時に Claude Code が渡す `CLAUDE_PLUGIN_DATA`、それも無ければ tmpdir/grok-companion)。ジョブは Claude セッション ID(`GROK_COMPANION_SESSION_ID`、SessionStart フックが export)でフィルタされる
 - `hooks/hooks.json` → SessionStart/SessionEnd(env 設定とジョブ掃除)、Stop(オプトインの stop-review-gate。`setup --enable-review-gate` で有効化され、直前ターンの編集を Grok がレビューして BLOCK できる)
 - レビュー系は `prompts/*.md` テンプレート + `schemas/review-output.schema.json`(`--json-schema` で強制)で構造化 JSON を受け取り、`lib/render.mjs` が Markdown に整形する
 
@@ -38,6 +38,7 @@ node plugins/grok-cc/scripts/grok-companion.mjs status --json
 - `/grok-cc:review` も敵対レビューと同じくプロンプトベース(codex の built-in reviewer 相当は grok にない)。focus テキスト拒否の仕様は codex 版と合わせて維持
 - `--resume-last` は companion が記録した threadId(= grok sessionId)のみから解決する。`findLatestTaskThread` は常に null(無関係なセッションを誤って resume しないため)
 - 書き込みタスクの touchedFiles は git status の前後差分で算出
+- セッション env への export は固有名 `GROK_COMPANION_DATA` を使う。汎用名 `CLAUDE_PLUGIN_DATA` を export すると、同名を export する同系フォーク(codex plugin)と後勝ちで衝突し、互いの state ディレクトリを乗っ取る(実測でクラッシュ)
 - モデルエイリアス: `fast` → `grok-composer-2.5-fast`。effort は `none..xhigh` に加えて `max` を受け付ける
 
 ## 注意

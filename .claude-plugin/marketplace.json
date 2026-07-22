@@ -11,7 +11,7 @@
     {
       "name": "grok-cc",
       "description": "Use Grok from Claude Code to review code or delegate tasks.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Taichi"
       },
@@ -20,7 +20,7 @@
     {
       "name": "workflow-cc",
       "description": "PROGRESS.md 永続化フック + ループ実行ワークフロー skill 群 (implement-issue / run-epic / create-issue)。",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "author": {
         "name": "Taichi"
       },
