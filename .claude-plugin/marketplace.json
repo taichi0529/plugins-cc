@@ -15,7 +15,7 @@
       "author": {
         "name": "Taichi"
       },
-      "source": "./"
+      "source": "./plugins/grok-cc"
     }
   ]
 }

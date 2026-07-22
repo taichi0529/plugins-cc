@@ -6,17 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Claude Code 用の Grok プラグイン。OpenAI の Codex plugin for Claude Code (Apache 2.0) のフォークで、バックエンドを `codex app-server`(JSON-RPC)から `grok` CLI の headless モードに移植したもの。派生元の帰属表示は NOTICE にある。`grok.md` は移植前の Grok CLI 調査メモ。
 
+リポジトリはマルチプラグイン構成のマーケットプレイス。ルートの `.claude-plugin/marketplace.json` がプラグイン一覧(`plugins` 配列)を定義し、各プラグイン本体は `plugins/<name>/` 配下に置く。grok-cc プラグインの実体は `plugins/grok-cc/`(以下アーキテクチャ節のパスはすべてこのディレクトリからの相対)。LICENSE / NOTICE はプラグイン単体配布に含まれるよう `plugins/grok-cc/` にもコピーがある。
+
 ビルド・テストランナーはない。検証は以下で行う:
 
 ```bash
 # 構文チェック
-for f in scripts/*.mjs scripts/lib/*.mjs; do node --check "$f"; done
+for f in plugins/grok-cc/scripts/*.mjs plugins/grok-cc/scripts/lib/*.mjs; do node --check "$f"; done
 
 # companion を直接叩く(プラグインを通さない動作確認)
-node scripts/grok-companion.mjs setup --json
-node scripts/grok-companion.mjs task "prompt"           # read-only 1ターン
-node scripts/grok-companion.mjs review --json           # 構造化レビュー
-node scripts/grok-companion.mjs status --json
+node plugins/grok-cc/scripts/grok-companion.mjs setup --json
+node plugins/grok-cc/scripts/grok-companion.mjs task "prompt"           # read-only 1ターン
+node plugins/grok-cc/scripts/grok-companion.mjs review --json           # 構造化レビュー
+node plugins/grok-cc/scripts/grok-companion.mjs status --json
 ```
 
 ## アーキテクチャ
