@@ -4,7 +4,7 @@
     "name": "Taichi"
   },
   "metadata": {
-    "description": "Grok plugin to use in Claude Code for delegation and code review.",
+    "description": "Taichi's Claude Code plugins: Grok delegation/review and personal workflow automation.",
     "version": "0.1.0"
   },
   "plugins": [
@@ -16,6 +16,15 @@
         "name": "Taichi"
       },
       "source": "./plugins/grok-cc"
+    },
+    {
+      "name": "workflow-cc",
+      "description": "PROGRESS.md 永続化フック + ループ実行ワークフロー skill 群 (implement-issue / run-epic / create-issue)。",
+      "version": "0.4.1",
+      "author": {
+        "name": "Taichi"
+      },
+      "source": "./plugins/workflow-cc"
     }
   ]
 }

@@ -4,6 +4,8 @@
 
 Call the [Grok CLI](https://x.ai) (xAI's agentic coding CLI) from Claude Code. This is a derivative of OpenAI's [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc), with the backend ported from `codex app-server` to `grok` headless mode.
 
+This repository is a plugin marketplace. Besides `grok-cc` (this README), it also hosts [`workflow-cc`](plugins/workflow-cc/README.md) — a personal workflow plugin (PROGRESS.md persistence hooks + implement-issue / run-epic / create-issue skills). Install it with `/plugin install workflow-cc@taichi0529`.
+
 ## Requirements
 
 - Node.js
