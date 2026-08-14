@@ -1,0 +1,8 @@
+{
+  "name": "obsidian-cc",
+  "version": "0.2.2",
+  "description": "Obsidian vault 連携 plugin: セッションの作業内容をデイリーノートに日報として記録し、commit / push する daily-report skill と設定用の setup コマンド。",
+  "author": {
+    "name": "Taichi"
+  }
+}
