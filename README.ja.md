@@ -36,6 +36,17 @@ claude --plugin-dir /path/to/plugins-cc/plugins/<name>
 
 `--plugin-dir` にはリポジトリルートではなくプラグインディレクトリを指定すること。
 
+### 秘匿情報のスキャン
+
+コミット前に [gitleaks](https://github.com/gitleaks/gitleaks) が走る。git hook は clone に含まれないので、clone 後に 1 回だけ有効化する:
+
+```bash
+brew install pre-commit gitleaks
+pre-commit install
+```
+
+既定ルール(API キー・トークン・秘密鍵)に加えて、`.gitleaks.toml` で**ローカル絶対パス**(`/Users/<name>/` `/home/<name>/`)と**メールアドレス**を検出する。このリポジトリは公開マーケットプレイスなので、マシンや所属が分かる情報を置かないため。ドキュメントの例示には `/Users/you/` `<name>` `example.com` を使うこと(allowlist 済み)。検出されたら `--no-verify` で回避せず内容を直す。
+
 ## リポジトリ構成
 
 - `.claude-plugin/marketplace.json` — マーケットプレイス定義(プラグイン一覧・バージョン・ソース)

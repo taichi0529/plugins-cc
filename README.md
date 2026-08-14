@@ -36,6 +36,17 @@ claude --plugin-dir /path/to/plugins-cc/plugins/<name>
 
 Point `--plugin-dir` at the plugin directory, not the repository root.
 
+### Secret scanning
+
+Commits are scanned by [gitleaks](https://github.com/gitleaks/gitleaks) through a pre-commit hook. Git hooks are not part of a clone, so enable it once after cloning:
+
+```bash
+brew install pre-commit gitleaks
+pre-commit install
+```
+
+On top of the default rules (API keys, tokens, private keys), `.gitleaks.toml` flags **local absolute paths** (`/Users/<name>/`, `/home/<name>/`) and **email addresses** — this repository is a public marketplace, so nothing that reveals a machine or an employer belongs in it. Use `/Users/you/`, `<name>`, and `example.com` in documentation; those are allowlisted. If the hook fires, fix the content rather than passing `--no-verify`.
+
 ## Repository layout
 
 - `.claude-plugin/marketplace.json` — the marketplace definition (plugin list, versions, sources)
