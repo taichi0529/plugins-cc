@@ -1,0 +1,39 @@
+{
+  "name": "taichi0529",
+  "owner": {
+    "name": "Taichi"
+  },
+  "metadata": {
+    "description": "Taichi's Claude Code plugins: Grok delegation/review and personal workflow automation.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "grok-cc",
+      "description": "Use Grok from Claude Code to review code or delegate tasks.",
+      "version": "0.1.2",
+      "author": {
+        "name": "Taichi"
+      },
+      "source": "./plugins/grok-cc"
+    },
+    {
+      "name": "workflow-cc",
+      "description": "PROGRESS.md 永続化フック + ループ実行ワークフロー skill 群 (implement-issue / run-epic / create-issue)。",
+      "version": "0.10.1",
+      "author": {
+        "name": "Taichi"
+      },
+      "source": "./plugins/workflow-cc"
+    },
+    {
+      "name": "obsidian-cc",
+      "description": "セッションの作業内容を Obsidian のデイリーノートに日報として記録し、commit / push する daily-report skill と設定用の setup コマンド。",
+      "version": "0.2.2",
+      "author": {
+        "name": "Taichi"
+      },
+      "source": "./plugins/obsidian-cc"
+    }
+  ]
+}
