@@ -64,6 +64,8 @@ Node と Grok CLI が利用可能で認証済みかを確認する。このワ�
 |---|---|
 | `--enable-review-gate` | このリポジトリの Stop フックレビューゲートを有効化 |
 | `--disable-review-gate` | 無効化 |
+| `--allow-network` | レビュー / 読み取り専用タスクにネットワークを許可する。`~/.grok/sandbox.toml` にカスタムプロファイルを追加し、プラグイン全体でそれを選択する([サンドボックスプロファイル](#サンドボックスプロファイル)参照) |
+| `--disallow-network` | ビルトインの `read-only` プロファイルに戻す |
 | `--json` | 機械可読レポート(companion レベル。スラッシュコマンドは内部的に JSON を使用) |
 
 使用例:
@@ -72,6 +74,7 @@ Node と Grok CLI が利用可能で認証済みかを確認する。このワ�
 /grok-cc:setup
 /grok-cc:setup --enable-review-gate
 /grok-cc:setup --disable-review-gate
+/grok-cc:setup --allow-network
 ```
 
 ### `/grok-cc:rescue`
@@ -322,8 +325,31 @@ node scripts/grok-companion.mjs adversarial-review [...] [focus text]
 - `scripts/lib/grok.mjs` — Grok CLI 接続層。1 ターン = `grok --cwd … --sandbox … --always-approve --output-format streaming-json` の一発実行(`-p` または `--resume`)。スレッド継続は `--resume <session-id>`、構造化出力は `--json-schema`
 - レビューは `prompts/review.md` / `prompts/adversarial-review.md` のテンプレートに git diff コンテキストを埋め込み、`schemas/review-output.schema.json` に適合する JSON を受け取る
 - 書き込み可能なタスクはサンドボックスプロファイル `workspace`(companion 内部では `workspace-write` を `workspace` にマッピング)、レビューと読み取り専用タスクは `read-only`
+- `--sandbox` に渡すプロファイル名はアクセスモードごとに差し替えられる。`setup --allow-network` はプラグインデータディレクトリ直下の `config.json` にプラグイン全体の選択を保存し、`GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDBOX_WRITE` はそれを上書きする([サンドボックスプロファイル](#サンドボックスプロファイル)参照)。アクセスモード自体(変更ファイルを追跡するかどうか)は変わらない
 - ジョブ状態は `GROK_COMPANION_DATA`(プラグインフック実行時は `CLAUDE_PLUGIN_DATA`、それも無ければ tmpdir の `grok-companion/` にフォールバック)配下に保存。セッション env への export に汎用名 `CLAUDE_PLUGIN_DATA` を使わないのは意図的で、同系フォークのプラグインと衝突するため
 - app-server/broker は存在しない。各ターンは one-shot プロセスで、キャンセルはプロセスツリーの終了
+
+## サンドボックスプロファイル
+
+Grok の各ターンは `--sandbox <profile>` 付きで実行される。レビューと読み取り専用タスクはビルトインの `read-only`、書き込み可能なタスク(`task --write`・`rescue`)は `workspace` を使う。ビルトインの `read-only` は `restrict_network` も有効で、Linux では子プロセス(`curl`・`npm install` など)のネットワークが遮断される。macOS ではネットワーク遮断は no-op だが、Grok CLI 1.0.25 では `restrict_network` 付きプロファイルの適用自体が失敗して起動を拒否することがある(`runtime-socket deny resolution failed: … /var/run/docker.sock: endpoint is a symlink`。Docker Desktop 環境でよく起きる)。その場合レビューは全て失敗する。
+
+ファイルシステムは読み取り専用のままネットワークを許可するには、マシンごとに 1 回だけ実行する:
+
+```
+/grok-cc:setup --allow-network
+```
+
+これは以下のプロファイルを `~/.grok/sandbox.toml`(`$GROK_HOME/sandbox.toml`)に追記し(既存の内容は保持、既に定義済みなら追記しない)、選択をプラグインデータディレクトリ直下の `config.json` に記録する。設定は全ワークスペースに適用される:
+
+```toml
+[profiles.grok-cc-read-only-net]
+extends = "read-only"
+restrict_network = false
+```
+
+`--disallow-network` でビルトインの `read-only` に戻せる(カスタムプロファイルは `sandbox.toml` に残る)。setup レポートには現在のマッピングと出所が表示される(`sandbox profiles: read-only → … (built-in|config|env)`)。
+
+一時的な差し替えには `GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDBOX_WRITE`(Claude Code の `env` 設定など)で読み取り専用 / 書き込み可能ターンに渡すプロファイル名を指定できる。こちらは config より優先される。カスタムプロファイル名でビルトイン名(`workspace`・`devbox`・`read-only`・`strict`)は上書きできず、未定義の名前を指定すると grok はサンドボックス無しで動く代わりに起動を拒否する。
 
 ## モデルとエフォート
 

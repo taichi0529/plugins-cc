@@ -15,6 +15,7 @@ import path from "node:path";
 
 import { readJsonFile } from "./fs.mjs";
 import { binaryAvailable, runCommand } from "./process.mjs";
+import { getGlobalConfig } from "./state.mjs";
 
 const TASK_THREAD_PREFIX = "Grok Companion Task";
 const DEFAULT_CONTINUE_PROMPT =
@@ -26,6 +27,20 @@ const SANDBOX_PROFILES = new Map([
   ["read-only", "read-only"],
   ["workspace-write", "workspace"],
   ["workspace", "workspace"]
+]);
+
+// The grok `--sandbox` profile name can be swapped per access mode (e.g. a
+// custom profile from ~/.grok/sandbox.toml that extends the built-in one with
+// `restrict_network = false`). Precedence: env override, then the plugin-wide
+// config written by `setup --allow-network`, then the built-in name. The mode
+// itself (read-only vs write) is unchanged.
+export const SANDBOX_PROFILE_ENV = new Map([
+  ["read-only", "GROK_COMPANION_SANDBOX_READ_ONLY"],
+  ["workspace", "GROK_COMPANION_SANDBOX_WRITE"]
+]);
+export const SANDBOX_PROFILE_CONFIG_KEY = new Map([
+  ["read-only", "sandboxReadOnlyProfile"],
+  ["workspace", "sandboxWriteProfile"]
 ]);
 
 function shorten(text, limit = 96) {
@@ -68,8 +83,36 @@ function buildTaskThreadName(prompt) {
   return excerpt ? `${TASK_THREAD_PREFIX}: ${excerpt}` : TASK_THREAD_PREFIX;
 }
 
-function resolveSandboxProfile(sandbox) {
+function resolveSandboxMode(sandbox) {
   return SANDBOX_PROFILES.get(sandbox ?? "read-only") ?? "read-only";
+}
+
+function cleanProfileName(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function describeSandboxProfile(sandbox, env = process.env, config = getGlobalConfig()) {
+  const mode = resolveSandboxMode(sandbox);
+  const fromEnv = cleanProfileName(env[SANDBOX_PROFILE_ENV.get(mode)]);
+  if (fromEnv) {
+    return { mode, profile: fromEnv, source: "env" };
+  }
+  const fromConfig = cleanProfileName(config[SANDBOX_PROFILE_CONFIG_KEY.get(mode)]);
+  if (fromConfig) {
+    return { mode, profile: fromConfig, source: "config" };
+  }
+  return { mode, profile: mode, source: "built-in" };
+}
+
+export function resolveSandboxProfile(sandbox, env = process.env, config = getGlobalConfig()) {
+  return describeSandboxProfile(sandbox, env, config).profile;
+}
+
+export function getSandboxProfiles(env = process.env, config = getGlobalConfig()) {
+  return {
+    readOnly: describeSandboxProfile("read-only", env, config),
+    write: describeSandboxProfile("workspace", env, config)
+  };
 }
 
 function normalizeReasoningText(text) {
@@ -389,14 +432,14 @@ export async function runGrokTurn(cwd, options = {}) {
     throw new Error("A prompt is required for this Grok run.");
   }
 
-  const sandboxProfile = resolveSandboxProfile(options.sandbox);
+  const sandboxMode = resolveSandboxMode(options.sandbox);
   if (options.resumeThreadId) {
     emitProgress(options.onProgress, `Resuming Grok session ${options.resumeThreadId}.`, "starting");
   } else {
     emitProgress(options.onProgress, "Starting Grok session.", "starting");
   }
 
-  const filesBefore = sandboxProfile === "workspace" ? gitChangedFiles(cwd) : null;
+  const filesBefore = sandboxMode === "workspace" ? gitChangedFiles(cwd) : null;
   // 1s margin so filesystems with coarse mtime granularity don't miss edits
   // that land in the same second the run starts.
   const startedAtMs = Date.now() - 1000;

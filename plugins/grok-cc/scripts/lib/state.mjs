@@ -14,6 +14,7 @@ const PLUGIN_DATA_ENV = "GROK_COMPANION_DATA";
 const HOOK_PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
 const FALLBACK_STATE_ROOT_DIR = path.join(os.tmpdir(), "grok-companion");
 const STATE_FILE_NAME = "state.json";
+const GLOBAL_CONFIG_FILE_NAME = "config.json";
 const JOBS_DIR_NAME = "jobs";
 const MAX_JOBS = 50;
 
@@ -43,9 +44,41 @@ export function resolveStateDir(cwd) {
   const slugSource = path.basename(workspaceRoot) || "workspace";
   const slug = slugSource.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "workspace";
   const hash = createHash("sha256").update(canonicalWorkspaceRoot).digest("hex").slice(0, 16);
-  const pluginDataDir = process.env[PLUGIN_DATA_ENV] || process.env[HOOK_PLUGIN_DATA_ENV];
+  const pluginDataDir = resolvePluginDataDir();
   const stateRoot = pluginDataDir ? path.join(pluginDataDir, "state") : FALLBACK_STATE_ROOT_DIR;
   return path.join(stateRoot, `${slug}-${hash}`);
+}
+
+function resolvePluginDataDir() {
+  return process.env[PLUGIN_DATA_ENV] || process.env[HOOK_PLUGIN_DATA_ENV] || null;
+}
+
+// Plugin-wide settings that are not tied to a workspace (e.g. which sandbox
+// profile names to pass to grok). Lives next to the per-workspace state dirs.
+export function resolveGlobalConfigFile() {
+  return path.join(resolvePluginDataDir() ?? FALLBACK_STATE_ROOT_DIR, GLOBAL_CONFIG_FILE_NAME);
+}
+
+export function getGlobalConfig() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(resolveGlobalConfigFile(), "utf8"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function setGlobalConfig(key, value) {
+  const file = resolveGlobalConfigFile();
+  const next = { ...getGlobalConfig() };
+  if (value === null || value === undefined) {
+    delete next[key];
+  } else {
+    next[key] = value;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  return next;
 }
 
 export function resolveStateFile(cwd) {

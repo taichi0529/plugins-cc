@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.3
+
+- Add: `setup --allow-network` / `--disallow-network`. Appends a custom
+  `grok-cc-read-only-net` profile (`extends = "read-only"`,
+  `restrict_network = false`) to `$GROK_HOME/sandbox.toml` if missing and
+  selects it plugin-wide via `config.json` under the plugin data dir, so
+  reviews and read-only tasks keep a read-only filesystem but may use the
+  network. The `setup` report shows the active profile per mode and its
+  source (`built-in|config|env`).
+- Add: `GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDBOX_WRITE`
+  env overrides for the grok `--sandbox` profile name (take precedence over
+  the config). Touched-file tracking still follows the logical access mode,
+  not the profile name.
+- Note: Grok CLI 1.0.25 refuses to start the built-in `read-only` / `strict`
+  profiles when `/var/run/docker.sock` is a symlink (Docker Desktop); the
+  same custom profile works around it.
+
 ## 0.1.2
 
 - Fix: `getGrokAuthStatus` re-probes once when `grok models` reports a stale
