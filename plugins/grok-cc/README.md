@@ -64,6 +64,8 @@ Check that Node and the Grok CLI are available and authenticated. Optionally tog
 |---|---|
 | `--enable-review-gate` | Turn on the Stop-hook review gate for this repo |
 | `--disable-review-gate` | Turn it off |
+| `--allow-network` | Let reviews / read-only tasks use the network: adds a custom profile to `~/.grok/sandbox.toml` and selects it plugin-wide (see [Sandbox profiles](#sandbox-profiles)) |
+| `--disallow-network` | Go back to the built-in `read-only` profile |
 | `--json` | Machine-readable report (companion-level; the slash command already uses JSON internally) |
 
 Typical usage:
@@ -72,6 +74,7 @@ Typical usage:
 /grok-cc:setup
 /grok-cc:setup --enable-review-gate
 /grok-cc:setup --disable-review-gate
+/grok-cc:setup --allow-network
 ```
 
 ### `/grok-cc:rescue`
@@ -322,8 +325,31 @@ Paths below are relative to this plugin directory.
 - `scripts/lib/grok.mjs` — the Grok CLI layer. One turn = one `grok --cwd … --sandbox … --always-approve --output-format streaming-json` run (`-p` or `--resume`); threads continue via `--resume <session-id>`; structured output via `--json-schema`
 - Reviews embed git diff context into the `prompts/review.md` / `prompts/adversarial-review.md` templates and receive JSON conforming to `schemas/review-output.schema.json`
 - Write-capable tasks run with sandbox profile `workspace` (companion uses `workspace-write` internally, mapped to `workspace`); reviews and read-only tasks use `read-only`
+- The profile name passed to `--sandbox` can be swapped per access mode: `setup --allow-network` stores a plugin-wide choice in `config.json` under the plugin data dir, and `GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDBOX_WRITE` override it (see [Sandbox profiles](#sandbox-profiles)). The access mode itself (whether touched files are tracked) does not change
 - Job state is stored under `GROK_COMPANION_DATA` (falls back to `CLAUDE_PLUGIN_DATA` inside plugin hooks, then to `grok-companion/` in the tmpdir). The session-wide export deliberately avoids the generic `CLAUDE_PLUGIN_DATA` name, which collides with sibling plugins forked from the same codebase
 - There is no app-server/broker: each turn is a one-shot process; cancel terminates the process tree
+
+## Sandbox profiles
+
+Every Grok turn runs with `--sandbox <profile>`: reviews and read-only tasks use the built-in `read-only`, write-capable tasks (`task --write`, `rescue`) use `workspace`. Built-in `read-only` also sets `restrict_network`, which on Linux blocks network in child processes (`curl`, `npm install`, …). On macOS the network block is a no-op, but on Grok CLI 1.0.25 the `restrict_network` profiles can refuse to start entirely (`runtime-socket deny resolution failed: … /var/run/docker.sock: endpoint is a symlink`, common with Docker Desktop), which makes every review fail.
+
+To allow network access while keeping the filesystem read-only, run once per machine:
+
+```
+/grok-cc:setup --allow-network
+```
+
+This appends the following profile to `~/.grok/sandbox.toml` (`$GROK_HOME/sandbox.toml`; existing content is kept, and the step is skipped if the profile is already there) and records the choice in `config.json` under the plugin data dir, so it applies to every workspace:
+
+```toml
+[profiles.grok-cc-read-only-net]
+extends = "read-only"
+restrict_network = false
+```
+
+`--disallow-network` reverts to the built-in `read-only` profile (the custom profile is left in `sandbox.toml`). The setup report shows the active mapping and where it came from (`sandbox profiles: read-only → … (built-in|config|env)`).
+
+For ad-hoc overrides, `GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDBOX_WRITE` (e.g. in the Claude Code `env` setting) name the profile to pass for read-only / write-capable turns and take precedence over the config. Custom profile names cannot shadow built-in ones (`workspace`, `devbox`, `read-only`, `strict`), and an undefined name makes grok refuse to start rather than run unsandboxed.
 
 ## Models and effort
 

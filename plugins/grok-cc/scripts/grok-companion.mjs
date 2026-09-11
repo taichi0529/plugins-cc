@@ -12,6 +12,7 @@ import {
     findLatestTaskThread,
     getGrokAuthStatus,
     getGrokAvailability,
+    getSandboxProfiles,
     getSessionRuntimeStatus,
     importClaudeSession,
     interruptGrokTurn,
@@ -29,9 +30,11 @@ import {
   getConfig,
   listJobs,
   setConfig,
+  setGlobalConfig,
   upsertJob,
   writeJobFile
 } from "./lib/state.mjs";
+import { NETWORK_PROFILE_NAME, ensureNetworkProfile } from "./lib/sandbox.mjs";
 import {
   buildSingleJobSnapshot,
   buildStatusSnapshot,
@@ -183,6 +186,7 @@ async function buildSetupReport(cwd, actionsTaken = []) {
   const grokStatus = getGrokAvailability(cwd);
   const authStatus = await getGrokAuthStatus(cwd);
   const config = getConfig(workspaceRoot);
+  const sandboxProfiles = getSandboxProfiles(process.env);
 
   const nextSteps = [];
   if (!grokStatus.available) {
@@ -195,6 +199,11 @@ async function buildSetupReport(cwd, actionsTaken = []) {
   if (!config.stopReviewGate) {
     nextSteps.push("Optional: run `/grok-cc:setup --enable-review-gate` to require a fresh review before stop.");
   }
+  if (sandboxProfiles.readOnly.source === "built-in") {
+    nextSteps.push(
+      "Optional: run `/grok-cc:setup --allow-network` if reviews fail with `could not apply the 'read-only' sandbox profile` (grok 1.0.25 with a symlinked /var/run/docker.sock) or Grok needs network access in bash commands."
+    );
+  }
 
   return {
     ready: nodeStatus.available && grokStatus.available && authStatus.loggedIn,
@@ -202,6 +211,7 @@ async function buildSetupReport(cwd, actionsTaken = []) {
     grok: grokStatus,
     auth: authStatus,
     sessionRuntime: getSessionRuntimeStatus(process.env, workspaceRoot),
+    sandboxProfiles,
     reviewGateEnabled: Boolean(config.stopReviewGate),
     actionsTaken,
     nextSteps
@@ -211,11 +221,14 @@ async function buildSetupReport(cwd, actionsTaken = []) {
 async function handleSetup(argv) {
   const { options } = parseCommandInput(argv, {
     valueOptions: ["cwd"],
-    booleanOptions: ["json", "enable-review-gate", "disable-review-gate"]
+    booleanOptions: ["json", "enable-review-gate", "disable-review-gate", "allow-network", "disallow-network"]
   });
 
   if (options["enable-review-gate"] && options["disable-review-gate"]) {
     throw new Error("Choose either --enable-review-gate or --disable-review-gate.");
+  }
+  if (options["allow-network"] && options["disallow-network"]) {
+    throw new Error("Choose either --allow-network or --disallow-network.");
   }
 
   const cwd = resolveCommandCwd(options);
@@ -228,6 +241,20 @@ async function handleSetup(argv) {
   } else if (options["disable-review-gate"]) {
     setConfig(workspaceRoot, "stopReviewGate", false);
     actionsTaken.push(`Disabled the stop-time review gate for ${workspaceRoot}.`);
+  }
+
+  if (options["allow-network"]) {
+    const profile = ensureNetworkProfile(process.env);
+    actionsTaken.push(
+      profile.created
+        ? `Added sandbox profile \`${profile.profile}\` to ${profile.file}.`
+        : `Sandbox profile \`${profile.profile}\` already defined in ${profile.file}.`
+    );
+    setGlobalConfig("sandboxReadOnlyProfile", NETWORK_PROFILE_NAME);
+    actionsTaken.push(`Reviews and read-only tasks now run with sandbox profile \`${NETWORK_PROFILE_NAME}\` (network allowed, filesystem read-only).`);
+  } else if (options["disallow-network"]) {
+    setGlobalConfig("sandboxReadOnlyProfile", null);
+    actionsTaken.push("Reviews and read-only tasks now run with the built-in `read-only` sandbox profile (the custom profile stays in sandbox.toml).");
   }
 
   const finalReport = await buildSetupReport(cwd, actionsTaken);

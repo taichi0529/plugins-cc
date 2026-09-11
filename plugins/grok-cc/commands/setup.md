@@ -1,6 +1,6 @@
 ---
-description: Check whether the local Grok CLI is ready and optionally toggle the stop-time review gate
-argument-hint: '[--enable-review-gate|--disable-review-gate]'
+description: Check whether the local Grok CLI is ready and optionally toggle the stop-time review gate or allow network access in read-only sandbox runs
+argument-hint: '[--enable-review-gate|--disable-review-gate] [--allow-network|--disallow-network]'
 allowed-tools: Bash(node:*), Bash(curl:*), AskUserQuestion
 ---
 

@@ -47,5 +47,7 @@ node plugins/grok-cc/scripts/grok-companion.mjs status --json
 
 - `grok models` を認証プローブとして使っている(ネットワークに出る、タイムアウト 30s)。1 回目が「クリーンに未認証」を返したら `getGrokAuthStatus` が 1 度だけ再プローブする。grok は期限切れ間近の OIDC トークンを遅延リフレッシュしつつ、その回だけ古いスナップショットで "not authenticated" を表示する(リフレッシュ後の新トークンはプロセス終了前にディスクへ書かれる)ため。spawn 失敗・タイムアウト(`result.error` あり)ではリトライしない
 - macOS では grok の sandbox はファイルシステム制限のみ実効。ネットワーク遮断は効かない(詳細は `grok.md`)
+- `--sandbox` のプロファイル名は差し替え可能(`lib/grok.mjs` の `resolveSandboxProfile`)。優先順位は env(`GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDBOX_WRITE`)> プラグイン全体の config(`lib/state.mjs` の `getGlobalConfig`、データディレクトリ直下の `config.json`)> ビルトイン名。`setup --allow-network` は `lib/sandbox.mjs` で `$GROK_HOME/sandbox.toml` に `grok-cc-read-only-net`(`extends = "read-only"` + `restrict_network = false`)を冪等に追記し、config に `sandboxReadOnlyProfile` を書く。touchedFiles を追跡するかどうかは差し替え前の論理モード(`resolveSandboxMode`)で判定するので、プロファイル名を変えても挙動が変わらない
+- grok 1.0.25 は `/var/run/docker.sock` がシンボリックリンクだとビルトイン `read-only` / `strict`(`restrict_network` 付き)の適用に失敗して起動を拒否する。上記カスタムプロファイル(`restrict_network = false`)ならこの問題も回避できる
 - commands/skills の文言は「companion の stdout を一切加工せず返す」「レビュー結果から勝手に修正を始めない」という規約が核。変更時はこの不変条件を壊さないこと
 - バージョンを上げるときは `.claude-plugin/plugin.json` とルートの `.claude-plugin/marketplace.json` の grok-cc エントリを**両方**同じ値にし、`CHANGELOG.md` にエントリを追記する

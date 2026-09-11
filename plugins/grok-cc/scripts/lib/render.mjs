@@ -174,6 +174,10 @@ function appendReasoningSection(lines, reasoningSummary) {
   }
 }
 
+function formatSandboxProfile(entry) {
+  return `${entry.profile} (${entry.source})`;
+}
+
 export function renderSetupReport(report) {
   const lines = [
     "# Grok Setup",
@@ -185,6 +189,7 @@ export function renderSetupReport(report) {
     `- grok: ${report.grok.detail}`,
     `- auth: ${report.auth.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,
+    `- sandbox profiles: read-only → ${formatSandboxProfile(report.sandboxProfiles.readOnly)}, write → ${formatSandboxProfile(report.sandboxProfiles.write)}`,
     `- review gate: ${report.reviewGateEnabled ? "enabled" : "disabled"}`,
     ""
   ];
