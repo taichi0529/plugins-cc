@@ -9,7 +9,7 @@
 1. **PROGRESS.md 永続化フック 3 本** — セッションをまたいで「作業の現在地」を機械可読な `PROGRESS.md` に保つ。git / issue に載らない情報(plan との乖離・失敗したアプローチ・ハマりどころ・次の一手)だけを残す
 2. **ワークフロー skill 群** — `create-issue`(起票)/ `implement-issue`(単一 Issue の end-to-end 実装)/ `run-epic`(EPIC 配下の Sub-issues 直列実装)。すべてリポジトリ非依存
 
-ビルド・テストランナーはない。フックは shell + `jq`、skill は Markdown 手順書。確定済み設計判断(D1〜D20)とテスト計画は `docs/handoff.md` にある。
+ビルド・テストランナーはない。フックは shell + `jq`、skill は Markdown 手順書。確定済み設計判断(D1〜D21)とテスト計画は `docs/handoff.md` にある。
 
 ## opt-in の仕組み(D10)
 
@@ -33,7 +33,7 @@ block 出力は旧スキーマ(トップレベル `decision`/`reason`)と新ス�
 ## skills
 
 - `create-issue`(Phase 4)→ PBI 形式の Issue 起票。`templates/*.md`(feature/bug/refactor/chore/epic/task)同梱。EPIC は Sub-issues API で親子管理。依存(`depends on:`)/ `Target scope` の機械可読宣言を含む。DoD はリポジトリ側データ(設定ファイルの `dodFiles` → `.claude/dod/*.md` → 無ければ省略)
-- `implement-issue`(Phase 2)→ Issue を**内部ループ(最大 10 試行・自己診断式)**で end-to-end 実装(ブランチ作成 → 実装 → ローカルゲート → `/simplify`(code-simplifier plugin・最初の PR 作成前に 1 回。diff 20 行未満・docs-only・利用不可は skip して報告)→ `/security-review`(PR 作成前・HIGH/MEDIUM 0 件必須。Step 5 では再実行しない)→ commit → push → PR → レビュー → 修正)。各試行は「現在の状態を読み直し次の 1 歩だけ進める」。マルチレビュアー対応(`review=codex,grok`)、既定レビュアーは `project` + `adversarial`(red-team: 独立 subagent が「壊れている」前提で具体的な破壊シナリオを探す。根拠の無い指摘は禁止)、レビューは初回フル・2 回目以降は差分照合モード(指摘を出したレビュアーのみ、指摘リスト + 修正 diff で解消判定)。`review-model=<名>` でレビュー系実行体(simplify / security-review / project / adversarial)のモデルを指定可、**既定は `opus`**(実装本体のモデルは変えない・codex / grok は対象外)。自動 merge はしない。**リポジトリ設定解決の正典**であり、**レビュー系実行体のモデル解決の正典**でもある(run-epic / create-issue から参照される)
+- `implement-issue`(Phase 2)→ Issue を**内部ループ(最大 10 試行・自己診断式)**で end-to-end 実装(ブランチ作成 → 実装 → ローカルゲート → `/simplify`(code-simplifier plugin・最初の PR 作成前に 1 回。diff 20 行未満・docs-only・利用不可は skip して報告)→ `/security-review`(PR 作成前・HIGH/MEDIUM 0 件必須。Step 5 では再実行しない)→ commit → push → PR → レビュー → 修正)。各試行は「現在の状態を読み直し次の 1 歩だけ進める」。マルチレビュアー対応(`review=codex,grok`)、既定レビュアーは `project` + `adversarial`(red-team: 独立 subagent が「壊れている」前提で具体的な破壊シナリオを探す。根拠の無い指摘は禁止)+ `grok`(別エンジンの視点を常設。利用不可なら fail-open で続行)、**レビュー系は独立かつ read-only なもの同士を必ず同一メッセージの複数 Agent 呼び出しで並列起動**(差分照合ラウンド・security-review の再実行も対象。simplify → security-review だけは直列)、レビューは初回フル・2 回目以降は差分照合モード(指摘を出したレビュアーのみ、指摘リスト + 修正 diff で解消判定)。`review-model=<名>` でレビュー系実行体(simplify / security-review / project / adversarial)のモデルを指定可、**既定は `opus`**(実装本体のモデルは変えない・codex / grok は対象外)。自動 merge はしない。**リポジトリ設定解決の正典**であり、**レビュー系実行体のモデル解決の正典**でもある(run-epic / create-issue から参照される)
 - `run-epic`(Phase 3)→ EPIC の OPEN な Sub-issues を GitHub API で取得し、子エージェント(`general-purpose`, `isolation: worktree`)へ委譲して実装。**既定は直列**。`parallel=N` 指定時のみ、依存宣言(`depends on:` / `Target scope`)の機械解析で独立と判定できた子を wave 並列(バッチ上限 N・親の 1b 検証は常に直列・**本文からの LLM 予測は判定に使わない**)。依存先 PR が未 merge の子は ready-set から外れ「merge 待ち」として次回実行に持ち越す。`model=<名>` で子エージェントのモデルを指定可(子 spawn のみに適用・省略時はセッションモデル継承・フォールバック禁止)。`review-model=<名>` は解釈せず子 prompt にパススルーする(子が回すレビュー系のモデル。`model=` とは別物)。worktree が成立しない環境(ツールチェーンが docker のみ等)は main checkout 直列に自動フォールバック(並列不可)。merge は人間
 
 ## リポジトリ設定の解決(ハードコード禁止)
@@ -46,7 +46,7 @@ skill はリポジトリ固有値をハードコードしない。設定ファ�
 | ベースブランチ | ルートの `baseBranch`(scope 内は禁止) | `gh repo view --json defaultBranchRef` |
 | ローカルゲート | ルートの `gates` + 変更ファイルにマッチした `scopes[].gates` の union | ルート `package.json` の scripts(`type-check`/`lint`/`test`)。無ければゲート無しとして続行し最終報告に明記 |
 | CI の扱い | ルートの `trustCI`(既定 true・scope 内は禁止) | true なら PR 後に `gh pr checks` を確認 |
-| レビュアー | ルートの `reviewers` + マッチ scope の union | `["project", "adversarial"]` |
+| レビュアー | ルートの `reviewers` + マッチ scope の union | `["project", "adversarial", "grok"]` |
 
 - **二段階解決**: repo-wide(baseBranch / trustCI)は起動時に 1 回、scope 依存(gates / reviewers / dodFiles)は**ゲート実行直前に変更ファイル集合から**再解決する(起動時には diff が存在しないため)
 - **prefix マッチ**: `file == prefix` または `file.startswith(prefix + "/")`。`apps/web` は `apps/web-old` にマッチしない

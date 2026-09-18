@@ -10,7 +10,7 @@ GitHub Issue の実装を、ブランチ作成から PR 作成・レビュー対
 
 引数: `$ARGUMENTS`
 - 第1引数: Issue 番号 (例: `42`, `#42`)
-- 任意: `review=<reviewer,...>` (例: `review=codex,grok`)。自然言語での指定 (「codex でもレビューして」) も同義に解釈する
+- 任意: `review=<reviewer,...>` (例: `review=codex,grok`)。省略時の既定は `project,adversarial,grok`。自然言語での指定 (「codex でもレビューして」) も同義に解釈する
 - 任意: `review-model=<モデル名>` (例: `review-model=sonnet`)。レビュー系実行体 (Step 3.5 / 3.6 / 5) を走らせるモデル。省略時の既定は **`opus`**。詳細は「レビュー系実行体のモデル解決」を参照
 - **`model=` は受け付けない**。指定された場合は実行せず「implement-issue に `model=` は無い。レビュー系のモデルは `review-model=`、run-epic の子エージェントのモデルは run-epic 側の `model=`」と報告して停止する (黙って `review-model` と読み替えない)
 
@@ -62,7 +62,7 @@ GitHub Issue の実装を、ブランチ作成から PR 作成・レビュー対
 | repo slug | — | `gh repo view --json nameWithOwner -q .nameWithOwner` (失敗時は `git remote get-url origin` から導出) |
 | ベースブランチ | `baseBranch` | `gh repo view --json defaultBranchRef -q .defaultBranchRef.name` |
 | CI の扱い | `trustCI` (既定 `true`) | `true`: PR 作成後に `gh pr checks` を確認し、失敗があれば修正対象として Step 3 に戻す。`false`: `gh pr checks` は一切見ない (CI がメンテされていないリポジトリ向け) |
-| グローバル既定の gates / reviewers / dodFiles | `gates` / `reviewers` / `dodFiles` | (② と補足を参照。reviewers の最終既定は `["project", "adversarial"]`) |
+| グローバル既定の gates / reviewers / dodFiles | `gates` / `reviewers` / `dodFiles` | (② と補足を参照。reviewers の最終既定は `["project", "adversarial", "grok"]`) |
 
 **② ゲート実行直前・レビュアー起動直前 (Step 3 のゲート / Step 5 のたびに再解決)** — 変更ファイル集合から scope を解決する:
 
@@ -283,7 +283,7 @@ Step 3.5 の直後に実行する。**HIGH / MEDIUM の未対応指摘が 0 件�
    - subagent 内から `security-review` が解決できなかった場合はその旨を返させ、**現セッションから Skill ツールで直接起動**する (この経路では model 未適用 — 最終報告に明記)
    - 副次的な利点: レポートが tool result として返るため、下記 6 の「レビューレポートを自分の最終応答にしてしまう」事故が構造的に起きにくくなる
 2. 指摘の扱い: **HIGH / MEDIUM は Step 3 に戻って修正** → 解決済みゲート再実行 → **本 Step を再実行**して 0 件を確認してから Step 4 へ。**LOW** は判断に委ね、却下時は理由を最終報告に添える
-3. **PR 作成後の修正ループでは再実行しない**。ただしレビュー対応でセキュリティに敏感な変更 (認証・認可・外部入力の扱い・シークレット・SQL / コマンド組み立て等) を加えた場合は再実行する
+3. **PR 作成後の修正ループでは再実行しない**。ただしレビュー対応でセキュリティに敏感な変更 (認証・認可・外部入力の扱い・シークレット・SQL / コマンド組み立て等) を加えた場合は再実行する。この再実行は Step 5 の次ラウンドのレビュアーと**同一メッセージで並列起動**する (Step 5「並列実行の原則」)
 4. **skip 条件**: 純 docs / コメントのみの変更 (例: `*.md` のみ) は skip し、最終報告に "security-review skipped: docs only" と明記
 5. **可用性フォールバック**: `/security-review` skill が環境に存在しない場合は**停止せず** Step 4 へ進み、最終報告に「security-review 利用不可」と明記する
 6. ⚠️ **レビューレポートを自分の最終応答にしない** (Step 5 の事故パターンと同じ罠)。review skill が return したら、応答を書かずに必ず次のツール呼び出し (HIGH/MEDIUM の修正 or Step 4 のコミット) を実行する
@@ -330,7 +330,9 @@ EOF
 
 1. 起動引数の明示指定: `review=codex,grok` (自然言語指定も同義)
 2. 設定ファイルの `reviewers` (「リポジトリ設定の解決」② — グローバル既定 + 変更ファイルにマッチした scope の union)
-3. 既定: `["project", "adversarial"]` (adversarial を外したいリポジトリは設定ファイルの `reviewers` で明示指定する — 引数 / 設定があれば既定は使われない)
+3. 既定: `["project", "adversarial", "grok"]` (adversarial / grok を外したいリポジトリは設定ファイルの `reviewers` で明示指定する。その回だけ外すなら `review=project,adversarial` — 引数 / 設定があれば既定は使われない)
+   - `grok` を既定に含めるのは、project / adversarial がどちらもセッションと同系統のモデルで動くため。**別エンジンの視点**を 1 つ常設して、同じ盲点を共有するレビューだけで合格させない
+   - grok-cc plugin が未インストール / Grok CLI が未認証の環境では下記「可用性フォールバック」で `grok: 利用不可` として続行する (既定に含まれているだけで本体のループを止めない)
 
 #### レビューラウンドの方式 (初回フル / 2 回目以降は差分照合)
 
@@ -340,18 +342,34 @@ EOF
   - prompt に渡すのは「前ラウンドの該当指摘リスト」+「修正 diff (`git diff <前ラウンドの HEAD SHA>...HEAD`)」のみ。full diff と Issue 本文の再埋め込みはしない
   - 判定させるのは 2 点だけ: (a) 各指摘が解消されたか (b) 修正 diff 自体に新たな問題が無いか
   - ラウンドごとに実行時 HEAD SHA を記録し直す
+  - 再実行対象が複数いるなら、**差分照合ラウンドでも同一メッセージで並列起動**する (下記「並列実行の原則」)
   - 再実行時のモデルは初回と同じ `<M>` を使う (ラウンドごとに変えない — 指摘の解消判定が同じ基準で行われるように)
   - **フル再実行に戻す例外**: 修正がレビュー済み範囲を大きく超えた場合 (目安: 修正 diff の行数が前ラウンドでレビューした diff の 5 割超)。この場合は初回と同じフル実行にする
 
+#### 並列実行の原則 (レビュー系は並列にできるものを必ず並列にする)
+
+レビュー系実行体は**互いに独立で、かつ working tree を書き換えないもの同士なら、必ず同一メッセージ内の複数 Agent 呼び出し (同期) で並列起動する**。1 体ずつ結果を待ってから次を起動しない (待ち時間が直列に積み上がるだけで、得られる指摘は変わらない)。
+
+| 場面 | 並列にするもの |
+|---|---|
+| Step 5 のフルラウンド | 解決された全レビュアー (project / adversarial / grok / codex) |
+| Step 5 の差分照合ラウンド | 再実行対象になったレビュアー全員 |
+| Step 5 のラウンド中に Step 3.6 の再実行が必要になった場合 (セキュリティに敏感な修正を入れた) | そのラウンドのレビュアー + security-review を同じメッセージで起動 |
+
+- 並列化の手段は**同一メッセージ内の複数 Agent 呼び出し (同期) に限る**。background 起動 + SendMessage 返信方式は、返信の宛先不達・通知の迷子が実測で発生している
+- **全員の結果が揃ってからトリアージする** (先に返ってきた 1 体の指摘で修正を始めない — 残りのレビュアーが古い HEAD を読むことになり、指摘と行番号がずれる)
+- Skill 経路に落ちたロール (model 未適用) は現セッションで動くため並列にできない。**Agent 経路のロールを先に並列起動し、その結果を受け取ってから** Skill 経路のロールを実行する
+- **並列にしないもの**: Step 3.5 (`/simplify`) → Step 3.6 (`/security-review`) は**直列のまま**。simplify は working tree を書き換える唯一のレビュー系実行体で、並走させると security-review が整理途中のコードを読む。「整理済みのコードに対して 1 回で済ませる」という Step 3.6 の前提も崩れる
+
 #### 各レビュアーの実行方法 (フル実行の形)
 
-指定された全レビュアーを**同一ターンで並列実行**する (最新 HEAD に対して)。並列化は**同一メッセージ内の複数 Agent 呼び出し (同期)** で行うこと — background 起動 + SendMessage 返信方式は、返信の宛先不達・通知の迷子が実測で発生している。
+指定された全レビュアーを上記の原則どおり**同一ターンで並列実行**する (最新 HEAD に対して)。
 
 `<M>` は「レビュー系実行体のモデル解決」で決めた値 (`review-model=inherit` のときは `model` パラメタを付与しない):
 
 - **`project`**: `Agent(subagent_type: "general-purpose", model: <M>)` を起動し、その中で review skill を実行させる。使わせる skill は「リポジトリに project 用 review skill (`.claude/skills/code-review-project/` が慣例) があればそれ (Gotcha リスト等のリポジトリ固有知見を含むため素の公式 skill より優先)、無ければ公式 `/code-review`」の順で、**親が起動前に解決して prompt に名前で埋め込む** (子に探させない)。prompt には「自分では修正せず指摘を構造化して返せ」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 も入れる。subagent 経路が使えない環境では現セッションから Skill ツールで直接起動し「project: model 未適用 (Skill 経路)」と最終報告に明記する。`/security-review` は **Step 3.6 で PR 作成前に実行済みのためここでは再実行しない** (二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 の規則に従い再実行する
 - **`codex`**: `Agent(subagent_type: "codex:codex-rescue")` — **`model` は渡さない** (実際にレビューするのは外部 CLI 側のエンジン)
-- **`grok`**: `Agent(subagent_type: "grok-cc:grok-rescue")` — 同上、`model` は渡さない
+- **`grok`** (既定に含まれる): `Agent(subagent_type: "grok-cc:grok-rescue")` — 同上、`model` は渡さない
 - **`adversarial`** (既定に含まれる): `Agent(subagent_type: "general-purpose", model: <M>)` で**実装とは独立したコンテキスト**の red-team レビューを起動する (実装した本人のコンテキストで自己批判させない — 自己整合バイアスで甘くなる)。prompt に埋め込む:
   - ローカル repo の絶対パス・レビュー対象ブランチ名・ベースブランチ名 (diff は `git diff <base>...<branch>` 等ローカル git で取らせる)
   - **Issue 本文の全文** (受け入れ条件込み)
@@ -395,7 +413,7 @@ EOF
 - `/simplify` の結果 (適用された整理の概要 / "simplify skipped: docs only" / 「simplify 利用不可」のいずれか)
 - `/security-review` の結果 (HIGH / MEDIUM / LOW の件数と対応状況・LOW 却下の理由 / "security-review skipped: docs only" / 「security-review 利用不可」のいずれか)
 - `trustCI` の扱い (true なら `gh pr checks` の結果、false なら「CI 不参照」)
-- レビュアーごとの指摘件数と採否。例: `project: must-fix 0・advisory 2 / adversarial: 2件 (採用1・却下1) / codex: 3件 (採用1・却下2) / grok: 利用不可`
+- レビュアーごとの指摘件数と採否。例: `project: must-fix 0・advisory 2 / adversarial: 2件 (採用1・却下1) / grok: 3件 (採用1・却下2) / codex: 利用不可`
 - レビューのラウンド数と方式 (例: `フル 1 + 差分照合 2`)
 - **`review-model` の解決値と実際の適用状況**。例: `review-model: opus (既定) — simplify / security-review / project / adversarial に適用。codex は対象外 (外部エンジン)`。既定が利用不可でモデル継承に落ちた場合・Skill 経路で model 未適用になったロールがある場合は必ずここに書く
 - 却下した指摘の理由 (簡潔に列挙)
@@ -419,7 +437,8 @@ EOF
 直接:
 ```
 /implement-issue 42
-/implement-issue 42 review=codex,grok
+/implement-issue 42 review=codex,grok             # レビュアーを明示 (既定は project,adversarial,grok)
+/implement-issue 42 review=project,adversarial   # grok を外す
 /implement-issue 42 review-model=sonnet          # レビュー系を sonnet で回す (既定は opus)
 /implement-issue 42 review-model=inherit         # レビュー系もセッションモデルを継承
 ```
