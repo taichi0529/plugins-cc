@@ -62,6 +62,7 @@
 | D17 (v0.9.0) | implement-issue は `/simplify` (Step 3.5) の直後・**最初の PR 作成前**に公式 `/security-review` を実行し (Step 3.6)、**HIGH / MEDIUM 未対応 0 件になるまで PR を作らない**。Step 5 の project フォールバックでは `/security-review` を再実行しない (前倒しによる二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 を再実行。docs-only / skill 不在は skip して最終報告に明記 (fail-open) | 脆弱性・シークレットを **push 前**に検出する (PR 後の指摘は公開済みコードへの後追い)。simplify で整理済みのコードに対して 1 回で済ませ、Step 5 との二重実行コストを削る。fail-open は D10 / D16 と同じ思想 |
 | D18 (v0.9.0) | 検証の重複を削減: (1) Step 5 の再レビューは**初回フル・2 回目以降は差分照合モード** — 前ラウンドで指摘を出したレビュアーだけに「前回指摘リスト + 修正 diff (`git diff <前回SHA>...HEAD`)」を渡し、解消判定 + 修正 diff 内の新規問題だけを見させる (修正 diff が前ラウンド diff の 5 割超ならフルに戻す)。(2) run-epic 子の Phase B ゲート最終確認は**最終 pass 時の HEAD SHA と同一かつ working tree clean なら skip** (SHA 一致を合格証拠として報告)。(3) simplify は **diff 合計 20 行未満なら skip**。親の 1b 実 shell 検証は削らない | 修正ラウンドごとの全レビュアー全量再実行が最大のトークン消費源。同一 HEAD への同一ゲート再実行は情報量ゼロ。小 diff への simplify は起動コストが期待効果を上回る。1b は子の虚偽 success (実測) への防御なので聖域 |
 | D19 (v0.10.0) | Step 5 の既定レビュアーに **`adversarial` (red-team レビュー)** を追加し既定を `["project", "adversarial"]` に。実装とは独立した `general-purpose` subagent が「この変更は壊れている」前提で具体的な破壊シナリオ (入力・状態 → 期待 vs 実際) を探す。**再現手順か根拠コード行の無い指摘は出させない**。スタイル指摘は禁止 (simplify / project の担当)、セキュリティ脆弱性は Step 3.6 の担当で主目的にしない。confidence 無しのため codex / grok と同じ 1 件ずつトリアージ (採否はシナリオが成立するかコードで確認)。差分照合モード (D18) の対象。外したいリポジトリは `reviewers` の明示指定で opt-out | 同調的な自己レビューは自分の実装を壊しにいかない — 独立コンテキスト + 攻撃姿勢の明示で盲点 (境界値・並行・エラーパス・後方互換) を突く。根拠必須の縛りは speculative 指摘の羅列によるトークン浪費 (D18 の思想) とトリアージ負担の膨張を防ぐ |
+| D20 (v0.11.0) | レビュー系実行体 (implement-issue の Step 3.5 `/simplify`・Step 3.6 `/security-review`・Step 5 の project / adversarial) のモデルを `review-model=<名>` 引数で指定可能にし、**既定を `opus`** とする。実装本体 (Step 3) のモデルは変えない。外部レビュアー (codex / grok) は対象外。モデルを渡すために実行体を **Agent 呼び出しに寄せる** (simplify → `code-simplifier:code-simplifier`、security-review / project → `general-purpose` subagent 内で Skill 起動、adversarial → 既に `general-purpose`)。利用不可時の扱いは**明示指定なら停止・既定なら継承へ fail-open** と分ける。設定ファイルには入れない。run-epic は `review-model=` を解釈せず子 prompt へパススルー (`model=` = 子本体、`review-model=` = 子が回すレビュー系) | レビューは見落としの代償が大きく、実装より高いモデルを充てる価値がある一方、実装まで常に高モデルにするのはコストが見合わない — 実装と検証でモデルを分離できるようにする。bundled skill (`/simplify` `/security-review` `/code-review`) は**引数でモデルを取らない**ため、Skill を直接叩く限りモデルは制御できない。subagent 経由なら Agent 呼び出しの `model` パラメタで指定できる (per-invocation override は `model` のみ対応・`effort` は不可) ので、実行体を Agent 側へ寄せた。security-review を subagent に入れる副次効果として「レビューレポートを自分の最終応答にする」実測事故 (Step 5 の警告) が構造的に起きにくくなる。明示値のフォールバック禁止は D15 と同じ (指定したモデルで動いた前提を裏切らない)、既定値の fail-open は D10 / D16 / D17 と同じ (環境依存の追加要素で本体のループを止めない)。設定ファイルに入れないのは D14 / D15 と同じ (コスト許容度は個人の都合でリポジトリの事実ではない) |
 
 ---
 
@@ -345,6 +346,21 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
    - [ ] `/run-epic <N> model=sonnet` で全子の spawn に model: "sonnet" が渡る (`parallel=2` 併用時も同様)
    - [ ] 環境が受け付けない model 値で spawn 拒否 → フォールバックせず「model=<値> が環境で利用不可」で停止・報告
    - [ ] 最終報告に使用 parallel / model 値が明記される
+
+### Phase 7: review-model= 引数 (v0.11.0 / D20)
+
+1. Phase 2 と同じ小さな issue 1 件で検証。
+2. 検証項目:
+   - [ ] `review-model` 未指定で simplify / security-review / project / adversarial の各実行体が **opus** で起動される (Agent 呼び出しに `model: "opus"` が付く)
+   - [ ] `review-model=sonnet` で上記 4 ロールが sonnet で起動される。実装 (Step 3) のモデルは変わらない
+   - [ ] `review-model=inherit` で `model` パラメタが付与されない
+   - [ ] codex / grok を指定しても、その 2 つには `model` が渡らない
+   - [ ] 明示指定した値で spawn 拒否 → フォールバックせず「review-model=<値> が環境で利用不可」で停止
+   - [ ] 既定 (opus) で spawn 拒否 → 停止せずモデル継承で続行し、最終報告に明記される
+   - [ ] `code-simplifier:code-simplifier` が無い環境で Skill 経路に落ち、「simplify: model 未適用 (Skill 経路)」が最終報告に出る
+   - [ ] `/implement-issue <N> model=sonnet` は `review-model` と読み替えられず停止・案内される
+   - [ ] `/run-epic <N> model=sonnet review-model=opus` で、子本体が sonnet・子のレビュー系が opus になる
+   - [ ] 最終報告に review-model の解決値と実際の適用状況が出る
 
 ### 全体の受け入れ条件
 

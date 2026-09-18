@@ -9,8 +9,8 @@
   - `PostToolUse` (Bash) — `git commit` / `gh pr create` 検知で更新を強制 (主役)。ログ 10 件超の機械トリムも担当
   - `Stop` — バックストップ (HEAD が PROGRESS.md より新しければ block)
 - **skills**
-  - `implement-issue` (Phase 2) — Issue を内部ループ (最大 10 試行・自己診断式) で end-to-end 実装。リポジトリ非依存 (repo slug / ベースブランチ / ゲートを自動導出、`.claude/workflow-cc.json` で明示指定可 — path-scope 対応、後述)。PR 作成**前**に `/simplify` (code-simplifier plugin) → `/security-review` (HIGH/MEDIUM 0 件必須) を実行。マルチレビュアー対応 (`review=codex,grok`) のレビューは PR 作成**後**で、既定は `project` + `adversarial` (red-team)
-  - `run-epic` (Phase 3) — EPIC の OPEN な Sub-issues をオーケストレーション。**既定は直列**、`parallel=N` 指定時は依存宣言 (`depends on:` / `Target scope`) の機械解析で独立と判定できた子だけを wave 並列 (worktree モード限定)。`model=<名>` で子エージェントのモデルも指定可 (例 `model=sonnet`。省略時はセッションモデル継承)。worktree 不成立環境 (ツールチェーンが docker のみ等) は main checkout 直列に自動フォールバック
+  - `implement-issue` (Phase 2) — Issue を内部ループ (最大 10 試行・自己診断式) で end-to-end 実装。リポジトリ非依存 (repo slug / ベースブランチ / ゲートを自動導出、`.claude/workflow-cc.json` で明示指定可 — path-scope 対応、後述)。PR 作成**前**に `/simplify` (code-simplifier plugin) → `/security-review` (HIGH/MEDIUM 0 件必須) を実行。マルチレビュアー対応 (`review=codex,grok`) のレビューは PR 作成**後**で、既定は `project` + `adversarial` (red-team)。レビュー系実行体のモデルは `review-model=<名>` で指定可、**既定は `opus`**
+  - `run-epic` (Phase 3) — EPIC の OPEN な Sub-issues をオーケストレーション。**既定は直列**、`parallel=N` 指定時は依存宣言 (`depends on:` / `Target scope`) の機械解析で独立と判定できた子だけを wave 並列 (worktree モード限定)。`model=<名>` で子エージェントのモデルも指定可 (例 `model=sonnet`。省略時はセッションモデル継承)、`review-model=<名>` は子が回すレビュー系のモデルとして子へパススルーされる。worktree 不成立環境 (ツールチェーンが docker のみ等) は main checkout 直列に自動フォールバック
   - `create-issue` (Phase 4) — PBI 形式の Issue 起票 (feature/bug/refactor/chore/epic/task テンプレ同梱)。依存 (`depends on:`) と `Target scope` の機械可読宣言を含む。DoD はリポジトリ側データ (設定ファイルの `dodFiles` → `.claude/dod/*.md` → 無ければ省略)
 
 ## implement-issue の実行フロー
@@ -35,6 +35,7 @@ flowchart TD
 - **security-review が PR 前・codex / grok が PR 後**なのは役割分担: 「push しても安全か」は push 前に担保し、品質の議論 (指摘の採否・却下理由) は PR コメントに投稿して人間が検証できるようにする。`trustCI` が true なら `gh pr checks` の失敗も Step 5 の修正ループで拾う
 - 外部レビュアー (codex / grok) は GitHub を参照しない (実行環境から届かない罠が実測済み)。ローカル repo の `git diff <base>...<branch>` を読ませる — PR はタイミングであって diff の入力ではない
 - **敵対的レビュー (v0.10.0)**: 既定レビュアーは `["project", "adversarial"]`。`adversarial` は実装と独立した subagent による **red-team レビュー** — 「この変更は壊れている」前提で、受け入れ条件を満たさない入力・境界値・並行・エラーパス・後方互換の**具体的な破壊シナリオ**を探す。再現手順か根拠コード行の無い指摘は出させない (speculative の羅列禁止)。セキュリティは Step 3.6 の担当で重複させない。外したいリポジトリは `workflow-cc.json` の `reviewers` で明示指定
+- **レビュー系のモデル分離 (v0.11.0)**: `review-model=<名>` で Step 3.5 / 3.6 / 5 の実行体のモデルを指定でき、**省略時の既定は `opus`**。実装本体 (Step 3) のモデルは変わらないので「実装は sonnet・検証は opus」という組み合わせが既定形になる。モデルを渡すため実行体は Agent 呼び出しに寄せてある (simplify → `code-simplifier:code-simplifier`、security-review / project → `general-purpose` subagent の中で Skill 起動、adversarial → もともと `general-purpose`)。bundled skill は引数でモデルを取らないため、Skill を直接叩く経路に落ちたロールは「model 未適用」として最終報告に出る。外部レビュアー (codex / grok) は外部 CLI 側のエンジンが動くので対象外。`review-model=inherit` で従来どおりの継承に戻せる。明示した値が使えなければ停止 (黙って別モデルに落とさない)、既定 `opus` が使えないだけなら継承で続行 (fail-open)
 - **検証コストの削減 (v0.9.0)**: レビューは初回フル・**2 回目以降は差分照合モード** (前ラウンドで指摘を出したレビュアーだけに、指摘リスト + 修正 diff を渡して解消判定させる)。simplify は diff 合計 20 行未満なら skip。run-epic の子は Phase B のゲート最終確認を「最終 pass 時と HEAD SHA が同一かつ clean なら skip」にして同一 HEAD への二重実行を避ける (親の 1b 実 shell 検証は削らない)
 
 ## run-epic の実行フロー

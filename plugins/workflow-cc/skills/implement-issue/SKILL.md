@@ -1,6 +1,6 @@
 ---
 name: implement-issue
-description: GitHub Issue を内部ループで end-to-end 実装するスキル (リポジトリ非依存)。ブランチ作成 → 実装 → ローカル検証 → コード整理 (/simplify) → セキュリティレビュー (/security-review) → コミット → push → PR 作成 → コードレビュー → 修正までを「現在の状態を読み直し、次の1歩を進める」を最大10回繰り返して完了させる。「Issue 実装して」「#123 を実装」「implement issue」「イシューを実装」などのリクエスト時に使用。引数は Issue 番号 + 任意の review= 指定 (例 `42 review=codex,grok`)。
+description: GitHub Issue を内部ループで end-to-end 実装するスキル (リポジトリ非依存)。ブランチ作成 → 実装 → ローカル検証 → コード整理 (/simplify) → セキュリティレビュー (/security-review) → コミット → push → PR 作成 → コードレビュー → 修正までを「現在の状態を読み直し、次の1歩を進める」を最大10回繰り返して完了させる。「Issue 実装して」「#123 を実装」「implement issue」「イシューを実装」などのリクエスト時に使用。引数は Issue 番号 + 任意の review= / review-model= 指定 (例 `42 review=codex,grok review-model=opus`)。
 ---
 
 # Issue Implementation Skill (汎用)
@@ -11,6 +11,8 @@ GitHub Issue の実装を、ブランチ作成から PR 作成・レビュー対
 引数: `$ARGUMENTS`
 - 第1引数: Issue 番号 (例: `42`, `#42`)
 - 任意: `review=<reviewer,...>` (例: `review=codex,grok`)。自然言語での指定 (「codex でもレビューして」) も同義に解釈する
+- 任意: `review-model=<モデル名>` (例: `review-model=sonnet`)。レビュー系実行体 (Step 3.5 / 3.6 / 5) を走らせるモデル。省略時の既定は **`opus`**。詳細は「レビュー系実行体のモデル解決」を参照
+- **`model=` は受け付けない**。指定された場合は実行せず「implement-issue に `model=` は無い。レビュー系のモデルは `review-model=`、run-epic の子エージェントのモデルは run-epic 側の `model=`」と報告して停止する (黙って `review-model` と読み替えない)
 
 ## 動作モード
 
@@ -90,6 +92,42 @@ GitHub Issue の実装を、ブランチ作成から PR 作成・レビュー対
 
 - **モノレポ**: サブプロジェクトごとにゲートが違う場合は `workflow-cc.json` の `scopes[]` で宣言すること (自動導出はリポジトリルートの `package.json` しか見ない。アプリ本体がサブディレクトリにある場合、宣言が無いと「ゲート無し」に解決される)
 - **「ゲート無し」に解決されても**、CLAUDE.md がコード品質チェック (formatter / linter / 静的解析 / テスト) の実行方法を規定している場合は、それをローカルゲートとして扱い必ず pass させる (CI と同一チェックであることが多い)
+
+## レビュー系実行体のモデル解決 (`review-model` — 正典)
+
+Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adversarial レビュー) を**どのモデルで走らせるか**を 1 つの値で決める。**実装本体 (Step 3) のモデルには影響しない** (実装は現在のセッション / 子エージェントのモデルのまま)。
+
+### 値の解決 (優先順)
+
+1. 起動引数 `review-model=<モデル名>` (例: `review-model=sonnet`)。自然言語での指定 (「レビューは sonnet で」) も同義に解釈する
+2. 省略時の既定: **`opus`** — レビューは見落としの代償が大きく、実装より高いモデルを充てる価値があるため
+3. `review-model=inherit` を明示したときだけ: `model` パラメタを付与せず**セッション / 子エージェントのモデルを継承**する
+
+- 値の allowlist は本 SKILL に持たない (利用可能なモデル名は harness 側の事実で環境ごとに変わる。代表例: `haiku` / `sonnet` / `opus` / `fable`)。値が空なら実行せずエラーを報告して停止
+- `.claude/workflow-cc.json` には**入れない**。モデル選択は個人・コスト都合であってリポジトリの事実ではない (run-epic の `model=` と同じ理由)
+
+### 利用不可だったときの扱い (明示指定と既定で分ける)
+
+| 状況 | 挙動 |
+|---|---|
+| **`review-model=` で明示した値**の spawn が拒否された | **フォールバックせず停止**し「review-model=<値> が環境で利用不可」と報告する |
+| **既定 (`opus`)** の spawn が拒否された | **停止しない**。`model` パラメタ無し (モデル継承) で即座に再試行し、最終報告に「review-model 既定の opus が利用不可のためモデル継承で実行」と明記する |
+
+「ユーザーが選んだ値を黙って別物に差し替えない」と「ユーザーが選んでいない既定で本体のループを止めない」を両立させる (後者は Step 3.5 / 3.6 の fail-open と同じ思想)。
+
+### 適用範囲 (ロール別 — `model` を渡せる形で起動する)
+
+以下では解決した値を `<M>` と書く (`review-model=inherit` のときは `model` パラメタ自体を付与しない)。
+
+| ロール | 実行体 | `model` 指定 |
+|---|---|---|
+| simplify (Step 3.5) | `Agent(subagent_type: "code-simplifier:code-simplifier", model: <M>)`。agent type が解決できない環境は Skill ツールで `simplify` を現セッションから起動 | Agent 経路のみ可 |
+| security-review (Step 3.6) | `Agent(subagent_type: "general-purpose", model: <M>)` の中で Skill ツールから `security-review` を起動させる | 可 |
+| project (Step 5) | 同じく `Agent(subagent_type: "general-purpose", model: <M>)` の中で、リポジトリの review skill / 公式 `/code-review` を起動させる | 可 (公式 `/code-review` が内部でさらに fork する分のモデルまでは制御できない) |
+| adversarial (Step 5) | `Agent(subagent_type: "general-purpose", model: <M>)` | 可 |
+| codex / grok (Step 5) | `Agent(subagent_type: "codex:codex-rescue" / "grok-cc:grok-rescue")` | **不可** — 実際にレビューするのは外部 CLI 側のエンジン。`review-model` は渡さない |
+
+**最終報告に「どのロールに `review-model` が実際に適用されたか」を書く** (適用できなかったロールは理由付きで)。ここを書かないと「opus でレビューしたつもりが継承モデルだった」という取り違えが検出できない。
 
 ## 成功条件 (全部満たしたら success を返す)
 
@@ -226,18 +264,24 @@ git checkout -b <type>/<kebab-summary>
 **最初の PR 作成前に必ず 1 回**実行する。**PR 作成後の修正ループでは再実行しない** (レビュー対応の diff を最小に保ち、採否検証を容易にするため)。
 
 1. 前提: Step 3 の解決済みローカルゲートがすべて pass していること
-2. code-simplifier plugin の `simplify` skill を **Skill ツール**で起動する (環境により `simplify` / `code-simplifier:simplify` の名で登録される)。対象は**本ブランチの変更ファイル (`git diff <base>...HEAD` の範囲) に限定**し、Issue スコープ外のファイルには触れさせない
+2. 「レビュー系実行体のモデル解決」で決めた `<M>` で起動する:
+   - **第 1 選択**: `Agent(subagent_type: "code-simplifier:code-simplifier", model: <M>)`。prompt に「リポジトリの絶対パス / ベースブランチ / 本ブランチ名」と「機能を変えない整理だけを行う」を明記する
+   - **第 2 選択** (`code-simplifier:code-simplifier` が解決できない環境): Skill ツールで `simplify` を現セッションから起動する。**この経路では model を指定できない** — 最終報告に「simplify: model 未適用 (Skill 経路)」と明記する
+   - どちらの経路でも対象は**本ブランチの変更ファイル (`git diff <base>...HEAD` の範囲) に限定**し、Issue スコープ外のファイルには触れさせない
 3. simplify が変更を加えた場合: **解決済みローカルゲートを再実行** (「リポジトリ設定の解決」② を再解決) し、すべて pass するまで Step 4 に進まない。simplify 起因でゲートが落ちた場合は該当の整理を revert してよい (**機能維持が最優先** — simplify は機能を変えない整理だけが目的)
 4. **skip 条件** (いずれかに該当したら skip し、最終報告に明記):
    - 純 docs / コメントのみの変更 (例: `*.md` のみ) → "simplify skipped: docs only"
    - **diff が小さい**: `git diff <base>...HEAD --shortstat` の追加 + 削除行の合計が **20 行未満** → "simplify skipped: small diff (<20 lines)" (起動コストが期待効果を上回るため)
-5. **可用性フォールバック**: `simplify` skill (および code-simplifier plugin) が環境に存在しない場合は**停止せず** Step 3.6 へ進み、最終報告に「simplify 利用不可」と明記する
+5. **可用性フォールバック**: 上記の第 1・第 2 選択がどちらも解決できない場合は**停止せず** Step 3.6 へ進み、最終報告に「simplify 利用不可」と明記する
 
 ### Step 3.6: セキュリティレビュー (/security-review — 最初の PR 作成前)
 
 Step 3.5 の直後に実行する。**HIGH / MEDIUM の未対応指摘が 0 件になるまで PR を作成しない** (push 前に検出するのが目的 — PR 後の指摘は公開済みコードへの後追いになる)。
 
-1. 公式 `/security-review` skill を **Skill ツール**で起動する (現在のブランチの pending changes / ベースブランチとの diff が対象)
+1. 「レビュー系実行体のモデル解決」で決めた `<M>` の subagent 内で公式 `/security-review` を起動する:
+   - `Agent(subagent_type: "general-purpose", model: <M>)` を起動し、prompt に埋め込む: 「**Skill ツールで `security-review` を起動**し、その指摘 (深刻度 / 対象ファイル:行 / 根拠 / 修正案) を構造化して返せ。**自分では修正しない** (採否は呼び出し元が判断する)」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 (対象は現在のブランチと `<base>` の diff)
+   - subagent 内から `security-review` が解決できなかった場合はその旨を返させ、**現セッションから Skill ツールで直接起動**する (この経路では model 未適用 — 最終報告に明記)
+   - 副次的な利点: レポートが tool result として返るため、下記 6 の「レビューレポートを自分の最終応答にしてしまう」事故が構造的に起きにくくなる
 2. 指摘の扱い: **HIGH / MEDIUM は Step 3 に戻って修正** → 解決済みゲート再実行 → **本 Step を再実行**して 0 件を確認してから Step 4 へ。**LOW** は判断に委ね、却下時は理由を最終報告に添える
 3. **PR 作成後の修正ループでは再実行しない**。ただしレビュー対応でセキュリティに敏感な変更 (認証・認可・外部入力の扱い・シークレット・SQL / コマンド組み立て等) を加えた場合は再実行する
 4. **skip 条件**: 純 docs / コメントのみの変更 (例: `*.md` のみ) は skip し、最終報告に "security-review skipped: docs only" と明記
@@ -296,16 +340,19 @@ EOF
   - prompt に渡すのは「前ラウンドの該当指摘リスト」+「修正 diff (`git diff <前ラウンドの HEAD SHA>...HEAD`)」のみ。full diff と Issue 本文の再埋め込みはしない
   - 判定させるのは 2 点だけ: (a) 各指摘が解消されたか (b) 修正 diff 自体に新たな問題が無いか
   - ラウンドごとに実行時 HEAD SHA を記録し直す
+  - 再実行時のモデルは初回と同じ `<M>` を使う (ラウンドごとに変えない — 指摘の解消判定が同じ基準で行われるように)
   - **フル再実行に戻す例外**: 修正がレビュー済み範囲を大きく超えた場合 (目安: 修正 diff の行数が前ラウンドでレビューした diff の 5 割超)。この場合は初回と同じフル実行にする
 
 #### 各レビュアーの実行方法 (フル実行の形)
 
-指定された全レビュアーを**同一ターンで並列実行**する (最新 HEAD に対して)。並列化は**同一メッセージ内の複数 Agent 呼び出し (同期)** で行うこと — background 起動 + SendMessage 返信方式は、返信の宛先不達・通知の迷子が実測で発生している:
+指定された全レビュアーを**同一ターンで並列実行**する (最新 HEAD に対して)。並列化は**同一メッセージ内の複数 Agent 呼び出し (同期)** で行うこと — background 起動 + SendMessage 返信方式は、返信の宛先不達・通知の迷子が実測で発生している。
 
-- **`project`**: リポジトリに project 用 review skill (`.claude/skills/code-review-project/` が慣例) があれば**それを使う** (Gotcha リスト等のリポジトリ固有知見を含むため素の公式 skill より優先)。無ければ公式 `/code-review` にフォールバックする。`/security-review` は **Step 3.6 で PR 作成前に実行済みのためここでは再実行しない** (二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 の規則に従い再実行する
-- **`codex`**: `Agent(subagent_type: "codex:codex-rescue")`
-- **`grok`**: `Agent(subagent_type: "grok-cc:grok-rescue")`
-- **`adversarial`** (既定に含まれる): `Agent(subagent_type: "general-purpose")` で**実装とは独立したコンテキスト**の red-team レビューを起動する (実装した本人のコンテキストで自己批判させない — 自己整合バイアスで甘くなる)。prompt に埋め込む:
+`<M>` は「レビュー系実行体のモデル解決」で決めた値 (`review-model=inherit` のときは `model` パラメタを付与しない):
+
+- **`project`**: `Agent(subagent_type: "general-purpose", model: <M>)` を起動し、その中で review skill を実行させる。使わせる skill は「リポジトリに project 用 review skill (`.claude/skills/code-review-project/` が慣例) があればそれ (Gotcha リスト等のリポジトリ固有知見を含むため素の公式 skill より優先)、無ければ公式 `/code-review`」の順で、**親が起動前に解決して prompt に名前で埋め込む** (子に探させない)。prompt には「自分では修正せず指摘を構造化して返せ」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 も入れる。subagent 経路が使えない環境では現セッションから Skill ツールで直接起動し「project: model 未適用 (Skill 経路)」と最終報告に明記する。`/security-review` は **Step 3.6 で PR 作成前に実行済みのためここでは再実行しない** (二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 の規則に従い再実行する
+- **`codex`**: `Agent(subagent_type: "codex:codex-rescue")` — **`model` は渡さない** (実際にレビューするのは外部 CLI 側のエンジン)
+- **`grok`**: `Agent(subagent_type: "grok-cc:grok-rescue")` — 同上、`model` は渡さない
+- **`adversarial`** (既定に含まれる): `Agent(subagent_type: "general-purpose", model: <M>)` で**実装とは独立したコンテキスト**の red-team レビューを起動する (実装した本人のコンテキストで自己批判させない — 自己整合バイアスで甘くなる)。prompt に埋め込む:
   - ローカル repo の絶対パス・レビュー対象ブランチ名・ベースブランチ名 (diff は `git diff <base>...<branch>` 等ローカル git で取らせる)
   - **Issue 本文の全文** (受け入れ条件込み)
   - 役割指定: 「**この変更は壊れていると仮定し、実際に壊れる具体的シナリオを探せ**。観点: 受け入れ条件を満たさない入力・状態 / 境界値 (空・0・巨大・不正型) / 並行・順序依存 / エラーパスでの状態・リソースの取りこぼし / 既存呼び出し元の後方互換。**再現手順または根拠となるコード行を示せない指摘は出すな** (『〜かもしれない』の羅列は禁止)。スタイル・好みには触れるな (simplify / project の担当)」
@@ -350,6 +397,7 @@ EOF
 - `trustCI` の扱い (true なら `gh pr checks` の結果、false なら「CI 不参照」)
 - レビュアーごとの指摘件数と採否。例: `project: must-fix 0・advisory 2 / adversarial: 2件 (採用1・却下1) / codex: 3件 (採用1・却下2) / grok: 利用不可`
 - レビューのラウンド数と方式 (例: `フル 1 + 差分照合 2`)
+- **`review-model` の解決値と実際の適用状況**。例: `review-model: opus (既定) — simplify / security-review / project / adversarial に適用。codex は対象外 (外部エンジン)`。既定が利用不可でモデル継承に落ちた場合・Skill 経路で model 未適用になったロールがある場合は必ずここに書く
 - 却下した指摘の理由 (簡潔に列挙)
 - 試行回数 (attempts)
 
@@ -364,6 +412,7 @@ EOF
 - **変更は Issue スコープ最小限**。周辺の整理整頓を PR に混ぜない
 - **`max_attempts = 10` を超えたら必ず failure を return**。無限ループは禁止 (リトライ判断は呼び出し元に委ねる)
 - **解決済みローカルゲートは必ず pass してから PR を作成・更新する**
+- **`review-model=` で明示された値が使えないときに、黙って別のモデルへ落とさない** (停止して報告する)。逆に既定 `opus` が使えないだけで本体のループを止めない (モデル継承で続行し報告に明記)
 
 ## 起動例
 
@@ -371,6 +420,8 @@ EOF
 ```
 /implement-issue 42
 /implement-issue 42 review=codex,grok
+/implement-issue 42 review-model=sonnet          # レビュー系を sonnet で回す (既定は opus)
+/implement-issue 42 review-model=inherit         # レビュー系もセッションモデルを継承
 ```
 
 run-epic 経由 (推奨、main context 保護):
