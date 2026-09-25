@@ -5,9 +5,6 @@ description: GitHub Issue を PBI (Product Backlog Item) 形式で日本語作�
 
 # GitHub Issue (PBI) 作成スキル (汎用)
 
-> **重要**: このスキルを実行する際は、**extended thinking (深い思考)** を使用すること。
-> 要件の分析、Acceptance Criteria の設計、技術的影響の検討には十分な思考が必要。
-
 > 外部ライブラリ・フレームワークを使用する Issue を作成する際は、**利用可能なら context7 MCP で最新ドキュメントを確認**すること (resolve-library-id → query-docs)。古い情報に基づいた Issue は避ける。
 
 ## リポジトリ設定の解決 (最初に 1 回)
