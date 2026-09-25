@@ -1,6 +1,6 @@
 ---
 name: run-epic
-description: EPIC issue 番号を渡すと、その Sub-issues を GitHub API で取得し、未クローズの子 issue を子エージェント (general-purpose, isolation=worktree) に委譲して実装するオーケストレーター skill (リポジトリ非依存)。既定は直列。parallel=N 指定時は依存宣言 (depends on / Target scope) の機械解析で独立と判定できた子だけを wave 並列する。各子は implement-issue のアルゴリズムを内部ループで完走させ、ローカルゲート通過 → PR 作成まで担い、親に構造化結果を返す。自動 merge はしない (merge は人間)。「EPIC #252 を回して」「run epic 252」「EPIC の sub-issue を全部実装」などのリクエスト時に使用。引数は EPIC 番号 + 任意の parallel= / model= / review-model= 指定 (例 252 parallel=2 model=sonnet review-model=opus)。
+description: EPIC issue 番号を渡すと、その Sub-issues を GitHub API で取得し、未クローズの子 issue を子エージェント (workflow-cc:implementer = 既定 opus / effort medium, isolation=worktree) に委譲して実装するオーケストレーター skill (リポジトリ非依存)。既定は直列。parallel=N 指定時は依存宣言 (depends on / Target scope) の機械解析で独立と判定できた子だけを wave 並列する。各子は implement-issue のアルゴリズムを内部ループで完走させ、ローカルゲート通過 → PR 作成まで担い、親に構造化結果を返す。自動 merge はしない (merge は人間)。「EPIC #252 を回して」「run epic 252」「EPIC の sub-issue を全部実装」などのリクエスト時に使用。引数は EPIC 番号 + 任意の parallel= / model= / review-model= 指定 (例 252 parallel=2 model=sonnet review-model=opus)。
 ---
 
 # Run-Epic Skill (EPIC Sub-issue オーケストレーション・汎用)
@@ -20,13 +20,20 @@ EPIC issue にぶら下がる **Sub-issues を実装するオーケストレー�
   - 推奨上限は 3 (子 1 体 = implement-issue 最大 10 試行 + レビューで重い。コストとマシン負荷に注意)
 - 任意: `model=<モデル名>` (例: `252 model=sonnet`)。自然言語での指定 (「子は sonnet で」) も同義に解釈する。`parallel=` と順不同で併用可
   - **子エージェント (implement-issue 実行体) の spawn にだけ適用する**。親自身・1b 検証・外部レビュアー (codex / grok = 外部 CLI 側のモデル) には影響しない
-  - 省略時は指定なし = 子はセッションモデルを継承 (従来どおり)
-  - 値の allowlist は SKILL 側に持たない (利用可能なモデル名は harness 側の事実で環境ごとに変わる。代表例: `haiku` / `sonnet` / `opus`)。値が空なら実行せずエラーを報告して停止。spawn が拒否された場合は**別モデルへフォールバックせず**「model=<値> が環境で利用不可」として停止・報告する
+  - 子は本 plugin の **`workflow-cc:implementer` agent** で起動する。その frontmatter が既定値を持つ: **`model: opus` / `effort: medium`**。実装は opus の medium で十分な品質が出るため、effort は上げずにレビュー側 (implement-issue の `workflow-cc:reviewer` = high) で担保する
+  - 起動の形:
+    | 指定 | 起動の形 | 子のモデル / effort |
+    |---|---|---|
+    | 省略 (既定) | `subagent_type: "workflow-cc:implementer"`・`model` パラメタは付けない | opus / medium |
+    | `model=<モデル名>` | `subagent_type: "workflow-cc:implementer"`・`model: "<モデル名>"` | 指定モデル / medium (effort は frontmatter 固定。Agent 呼び出しで上書きできるのは model だけ) |
+    | `model=inherit` | `subagent_type: "general-purpose"`・`model` パラメタは付けない | セッションのモデル・effort をそのまま継承 |
+  - 値の allowlist は SKILL 側に持たない (利用可能なモデル名は harness 側の事実で環境ごとに変わる。代表例: `haiku` / `sonnet` / `opus` / `fable`)。値が空なら実行せずエラーを報告して停止
+  - 利用不可時: **明示した値**の spawn が拒否された場合は**別モデルへフォールバックせず**「model=<値> が環境で利用不可」として停止・報告する。**既定**の spawn がモデル起因で拒否された (opus が使えない環境) 場合は停止せず `general-purpose` (継承) で起動し、最終報告に明記する。`workflow-cc:implementer` が agent type として解決できない場合は `general-purpose` に既定なら `model: "opus"`・明示値ならその値を付けて起動し、**effort 未適用**として最終報告に明記する
   - 設定ファイル (`.claude/workflow-cc.json`) には入れない — `parallel` と同じ理由 (モデル選択は個人・コスト都合。D15)
 - 任意: `review-model=<モデル名>` (例: `252 review-model=sonnet`)。他の引数と順不同で併用可
   - **子が回すレビュー系実行体** (implement-issue の Step 3.5 `/simplify` / Step 3.6 `/security-review` / Step 5 の project・adversarial) のモデル。**`model=` とは別物** — `model=` は子エージェント本体 (実装する主体)、`review-model=` は子がさらに起動するレビュー系 subagent
-  - 親は値を解釈せず**そのまま子の prompt に埋め込む**。解決規則と既定値 (**`opus`**)・利用不可時の扱いは implement-issue SKILL.md の「レビュー系実行体のモデル解決」が正典
-  - 省略時は子側の既定 (`opus`) が効く。レビューも子と同じモデルで回したいなら `review-model=inherit` を明示する
+  - 親は値を解釈せず**そのまま子の prompt に埋め込む**。解決規則と既定値 (**`opus` / effort high**)・利用不可時の扱いは implement-issue SKILL.md の「レビュー系実行体のモデル解決」が正典
+  - 省略時は子側の既定 (`opus` / effort high) が効く。レビューも子と同じモデル・effort で回したいなら `review-model=inherit` を明示する
   - 外部レビュアー (codex / grok) には適用されない (レビューするのは外部 CLI 側のエンジン)
   - `model=` と同じく設定ファイルには入れない
 
@@ -159,11 +166,11 @@ spawn 前にバッチ共通の準備を親が行う:
 
 各 `Agent` のパラメタ:
 
-- `subagent_type`: `general-purpose`
+- `subagent_type`: 引数節の `model=` の表で決めたもの (既定 `workflow-cc:implementer`。`model=inherit` のときだけ `general-purpose`)
 - `isolation`: `"worktree"` (必須 — 親の cwd を汚さない)
-- `model`: `model=` 引数の指定時のみその値を渡す。未指定なら**このパラメタ自体を付与しない** (= 子はセッションモデルを継承)。**`review-model=` の値をここに渡してはいけない** (別物)
+- `model`: `model=<モデル名>` の指定時のみその値を渡す。未指定・`inherit` なら**このパラメタ自体を付与しない** (未指定 = frontmatter の opus、`inherit` = セッションモデル)。**`review-model=` の値をここに渡してはいけない** (別物)
 - `description`: `Issue #<N> 実装 + ローカルゲート pass + PR 作成`
-- `prompt`: 下記テンプレ (`<N>` = Sub-issue 番号、`<base>` = ベースブランチ、`<SKILL_PATH>` = 親が解決した implement-issue SKILL.md の絶対パス、`<assigned-branch>` = 親が割り当てたブランチ名、`<BASE_SHA>` = 捕捉した base SHA、`<REVIEW_MODEL>` = `review-model=` の値 (未指定なら文字列 `既定 (opus)`)、に置換)
+- `prompt`: 下記テンプレ (`<N>` = Sub-issue 番号、`<base>` = ベースブランチ、`<SKILL_PATH>` = 親が解決した implement-issue SKILL.md の絶対パス、`<assigned-branch>` = 親が割り当てたブランチ名、`<BASE_SHA>` = 捕捉した base SHA、`<REVIEW_MODEL>` = `review-model=` の値 (未指定なら文字列 `既定 (opus / effort high)`)、に置換)
 
 ```
 あなたはこのリポジトリの実装エージェントです。
@@ -223,7 +230,7 @@ review が 0 件になったら、**自分のタスクが半分終わっただ�
    - 主な変更点 2-3 行
    - implement-issue が消費した試行回数 (attempts)
    - レビュアーごとの指摘件数と採否 (却下した advisory は 1 行で要約)
-   - review-model の解決値と実際の適用状況 (既定が利用不可でモデル継承に落ちた / Skill 経路で model 未適用になったロールがあれば明記)
+   - レビュー系のモデル・effort の解決値と実際の適用状況 (既定が利用不可で継承に落ちた / effort 未適用の経路や Skill 経路に落ちたロールがあれば明記)
    - 想定外があれば 1-2 行
 
 ローカルゲート失敗 / max_attempts 到達 / その他停止すべき問題に遭遇したら、即座に親に "failure: <理由>" で返してください。リトライや回避策は子側で行わず、親が判断します。
@@ -314,7 +321,7 @@ ready-set のバッチ列を処理し切ったら:
    ```
 
 2. ユーザーへの最終報告:
-   - EPIC #$ARGUMENTS の処理サマリ / 実装 Sub-issue 数 / 使用した parallel / model 値 (model 未指定なら「セッションモデル継承」) / review-model 値 (未指定なら「既定 opus」) と、子から集めた実際の適用状況
+   - EPIC #$ARGUMENTS の処理サマリ / 実装 Sub-issue 数 / 使用した parallel / 子のモデル・effort (未指定なら「既定 opus / medium」、`inherit` なら「セッション継承」。フォールバックが起きたらその旨) / review-model 値 (未指定なら「既定 opus / high」) と、子から集めた実際の適用状況
    - バッチ構成と根拠 (parallel ≥ 2 のとき)・依存 merge 待ちで未処理の子
    - config_source (workflow-cc / auto-derive) と旧 `.claude/workflow.json` 検出時のリネーム案内 (該当時)
    - 全 PR URL (merge 待ちリスト、対応する `Closes #<N>` 付き)
@@ -352,6 +359,7 @@ ready-set のバッチ列を処理し切ったら:
 /run-epic 252 parallel=2
 /run-epic 252 parallel=2 model=sonnet
 /run-epic 252 model=sonnet review-model=opus
+/run-epic 252 model=inherit
 ```
 
-→ EPIC #252 の OPEN な Sub-issues を処理し、各 PR を作成して merge 待ちにする。既定は上から順の直列。`parallel=2` では独立性トリアージで並列可と判定された子だけを最大 2 体ずつ同時実行する。`model=sonnet` を足すと子エージェントが sonnet で動く (省略時はセッションモデル継承)。`review-model=opus` は子が回すレビュー系 (simplify / security-review / project / adversarial) を opus で走らせる指定で、**省略しても既定で opus** になる (実装は sonnet・レビューは opus という組み合わせが既定形)。途中で停止した場合は、原因を直してから同じコマンドを再実行すれば、未処理 (OPEN かつ verified-ready な PR を持たない) の Sub-issue から再開する。
+→ EPIC #252 の OPEN な Sub-issues を処理し、各 PR を作成して merge 待ちにする。既定は上から順の直列。`parallel=2` では独立性トリアージで並列可と判定された子だけを最大 2 体ずつ同時実行する。子エージェントは既定で opus / effort medium で動き、`model=sonnet` を足すと sonnet / medium になる (`model=inherit` でセッションのモデル・effort を継承)。子が回すレビュー系 (simplify / security-review / project / adversarial) は既定で opus / effort high — 「実装は opus medium・レビューは opus high」が既定形。`review-model=sonnet` 等でレビュー側のモデルだけ変えられる。途中で停止した場合は、原因を直してから同じコマンドを再実行すれば、未処理 (OPEN かつ verified-ready な PR を持たない) の Sub-issue から再開する。
