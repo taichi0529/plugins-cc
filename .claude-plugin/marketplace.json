@@ -20,7 +20,7 @@
     {
       "name": "workflow-cc",
       "description": "PROGRESS.md 永続化フック + ループ実行ワークフロー skill 群 (implement-issue / run-epic / create-issue)。",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "author": {
         "name": "Taichi"
       },
