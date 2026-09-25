@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.4
+
+- Fix: `grok-rescue` no longer adds `--background` to `task` on its own.
+  `--background` / `--wait` are Claude-side execution controls, matching
+  `grok-cli-runtime` and `/grok-cc:rescue`; a self-chosen background run
+  returned only a "started in background" line to callers that expected the
+  result (e.g. workflow-cc's grok reviewer).
+- Change: when Grok cannot be invoked, `grok-rescue` returns one line,
+  `Grok unavailable: <reason>`, instead of nothing, so callers can tell a
+  failed run from an empty one and the subagent has no gap to fill with its
+  own answer.
+- Change: the "don't grab simple asks" routing hint moved from the
+  subagent body to its `description`, where routing actually happens.
+- Change: `grok-result-handling` states the ask-before-fixing rule plainly
+  and scopes it to presenting `/grok-cc:review` / `adversarial-review`
+  results to the user; workflows that own triage follow their own rules.
+
 ## 0.1.3
 
 - Add: `setup --allow-network` / `--disallow-network`. Appends a custom
