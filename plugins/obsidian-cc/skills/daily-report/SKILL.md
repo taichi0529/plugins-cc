@@ -142,13 +142,13 @@ git -C <repoRoot> add <触ったファイルのみ>
 git -C <repoRoot> push <remote> <branch>
 ```
 
-commit メッセージは日本語で、その日の作業内容が分かる 1 行 + 必要なら箇条書き。複数行のメッセージをヒアドキュメントで渡す場合も `-C` を落とさないこと。正しい形は次の通り。
+commit メッセージは日本語で、その日の作業内容が分かる 1 行 + 必要なら箇条書き。co-author 行はセッションの harness 指示があればそれに従う (モデル名をここに固定しない)。複数行のメッセージをヒアドキュメントで渡す場合も `-C` を落とさないこと。正しい形は次の通り。
 
 ```bash
 git -C <repoRoot> commit -m "$(cat <<'EOF'
 add: <today> の日報を更新
 
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+<harness 指定の co-author 行 (あれば)>
 EOF
 )"
 ```

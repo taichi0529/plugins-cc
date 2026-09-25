@@ -29,7 +29,7 @@
     {
       "name": "obsidian-cc",
       "description": "セッションの作業内容を Obsidian のデイリーノートに日報として記録し、commit / push する daily-report skill と設定用の setup コマンド。",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "author": {
         "name": "Taichi"
       },
