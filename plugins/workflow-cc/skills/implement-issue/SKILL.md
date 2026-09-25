@@ -145,7 +145,7 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 - [ ] 最初の PR 作成前に `/security-review` を実行済みで、**HIGH / MEDIUM の未対応指摘が 0 件** (利用不可 / docs-only で skip した場合はその旨を最終報告に明記)
 - [ ] `trustCI` が true の場合: `gh pr checks` に失敗が無い
 - [ ] Step 5 のレビューを最新 HEAD に対して実行済みで (初回ラウンドはフル実行、2 回目以降は差分照合モードで可)、**(a) project レビューの must-fix (信頼度 ≥80) の未対応指摘が 0 件、(b) security HIGH / MEDIUM の未対応指摘が 0 件、(c) 外部レビュアー (codex / grok) / adversarial レビューの指摘のうち採用した分の未対応が 0 件** (advisory (60-79) は無視可、ただし最終報告に件数を残す。純 docs / コメントのみの PR は scope 外で skip 可、その場合は最終報告に "skipped: docs only" と記載)
-- [ ] 変更点を 3〜5 行で要約した最終報告を準備済み (PR URL 含む)
+- [ ] Step 6 の項目を満たす最終報告を準備済み (PR URL 含む)
 
 ## アルゴリズム (内部ループ)
 
@@ -198,7 +198,7 @@ last_state: <Step 0 の最終診断結果>
 attempts: <使用した試行回数>
 ```
 
-直接起動 (main thread) の場合は最終応答に上記を 3〜5 行で要約してユーザーに提示する。
+直接起動 (main thread) の場合は、上記の代わりに Step 6 の最終報告をユーザーに提示する。
 
 ## PROGRESS.md との連携
 
@@ -328,9 +328,7 @@ EOF
 
 ### Step 5: コードレビュー (マルチレビュアー対応)
 
-⚠️ **このステップは「terminal step」ではありません。** review が 0 件になっても、自分のタスクは未完了です。本ステップ完了後、**Step 6 (完了報告) を必ず連続実行**してください。「review skill の execution が return した」≠「implement-issue タスクが完了した」
-
-⚠️ **実測 2 回の事故パターン (最重要)**: レビュー (特に /security-review) の実行直後、その**レビューレポートを自分の最終応答にしてタスクを終了**してしまう — review skill の出力フォーマット指示に応答が乗っ取られる。レビューが return したら、**応答を書かずに必ず次のツール呼び出し (トリアージ → PR コメント投稿) を実行**すること。レビューレポート自体を最終応答にしてはならない。
+本ステップの後には Step 6 (完了報告) が続く。レビューが return したら、そのレポートを最終応答にせず次のツール呼び出し (トリアージ → PR コメント投稿) に進む — review skill の出力フォーマット指示に応答が引きずられ、レポートを最終応答にして終了した例が過去 2 回ある (Skill 経路で現セッションから起動した場合に起きやすい)。
 
 #### レビュアーの解決 (優先順)
 
@@ -414,7 +412,7 @@ EOF
 最終報告に以下を含める:
 
 - PR URL
-- 実装内容の要約 (箇条書き 3〜5 行)
+- 実装内容の要約 (箇条書き。PR を開かなくても変更の要点が分かる粒度で)
 - ローカルゲートの実行結果 (各ゲートの pass/skip。ゲート無しならその旨)
 - `/simplify` の結果 (適用された整理の概要 / "simplify skipped: docs only" / 「simplify 利用不可」のいずれか)
 - `/security-review` の結果 (HIGH / MEDIUM / LOW の件数と対応状況・LOW 却下の理由 / "security-review skipped: docs only" / 「security-review 利用不可」のいずれか)
