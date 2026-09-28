@@ -955,9 +955,6 @@ async function handleCancel(argv) {
     );
   }
 
-  terminateProcessTree(job.pid ?? Number.NaN);
-  appendLogLine(job.logFile, "Cancelled by user.");
-
   const completedAt = nowIso();
   const nextJob = {
     ...job,
@@ -981,6 +978,12 @@ async function handleCancel(argv) {
     errorMessage: "Cancelled by user.",
     completedAt
   });
+
+  // Signal only after the cancelled record is on disk: the job winds down on its own
+  // once signalled, and runTrackedJob keeps a cancelled record instead of
+  // overwriting it with failed/completed.
+  terminateProcessTree(job.pid ?? Number.NaN);
+  appendLogLine(job.logFile, "Cancelled by user.");
 
   const payload = {
     jobId: job.id,
