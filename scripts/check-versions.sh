@@ -29,6 +29,10 @@ listed=""
 
 while IFS="$SEP" read -r name kind source mversion; do
   [ -n "$name$kind$source$mversion" ] || continue
+  rel=${source#./}
+  rel=${rel%/}
+  # 掲載済みディレクトリは name の有無に関係なく記録する (未掲載チェックでの二重報告を防ぐ)
+  [ "$kind" = "local" ] && [ -n "$rel" ] && listed="$listed $rel"
   if [ -z "$name" ]; then
     echo "NG  (name なし): marketplace.json のエントリに name が無い (source=${source:-<なし>})" >&2
     status=1
@@ -43,9 +47,6 @@ while IFS="$SEP" read -r name kind source mversion; do
     status=1
     continue
   fi
-  rel=${source#./}
-  rel=${rel%/}
-  listed="$listed $rel"
   manifest="$ROOT/$rel/.claude-plugin/plugin.json"
   if [ ! -f "$manifest" ]; then
     echo "NG  $name: marketplace.json にあるが plugin.json が無い ($rel/.claude-plugin/plugin.json)" >&2
