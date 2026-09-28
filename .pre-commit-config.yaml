@@ -1,7 +1,7 @@
 # コミット前に秘匿情報・環境情報を検出する。
 #
 # 有効化 (clone 後に 1 回だけ必要。git hook はリポジトリに含まれないため):
-#   brew install pre-commit gitleaks
+#   brew install pre-commit gitleaks jq
 #   pre-commit install
 #
 # 検出されたときは --no-verify で握り潰さず、必ず内容を直すこと。
@@ -16,9 +16,9 @@ repos:
         pass_filenames: false
       - id: check-versions
         name: check-versions (plugin.json と marketplace.json の version 一致)
-        # pre-commit は未ステージの変更を退避してから hook を走らせるので、
-        # スクリプトが読む作業ツリーはコミット内容と一致する
-        entry: bash scripts/check-versions.sh
+        # 対象ファイルの有無 (削除を含む) の判定と、ステージ内容での検査はラッパー側で行う。
+        # files: は削除を拾わないので使わず always_run にしている
+        entry: bash scripts/pre-commit-check-versions.sh
         language: system
         pass_filenames: false
-        files: ^(\.claude-plugin/marketplace\.json|plugins/[^/]+/\.claude-plugin/plugin\.json)$
+        always_run: true
