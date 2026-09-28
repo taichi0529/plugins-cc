@@ -7,19 +7,44 @@ set -u
 
 command -v jq >/dev/null 2>&1 || { echo "jq が見つからない (brew install jq)" >&2; exit 2; }
 
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 MARKETPLACE="$ROOT/.claude-plugin/marketplace.json"
 [ -f "$MARKETPLACE" ] || { echo "marketplace.json が無い: $MARKETPLACE" >&2; exit 2; }
 
-ENTRIES=$(jq -r '.plugins[] | [.name, .source, .version // ""] | @tsv' "$MARKETPLACE" 2>/dev/null) \
-  || { echo "marketplace.json を JSON として読めない: $MARKETPLACE" >&2; exit 2; }
+# 区切りは IFS 空白でない \x1f (タブだと read が空フィールドを潰して列がずれる)。
+# source が文字列でないエントリ (github 等の外部 source) は type 列で見分ける。
+SEP=$'\x1f'
+ENTRIES=$(jq -r '
+  if (.plugins | type) != "array" then error(".plugins が配列ではない") else . end
+  | .plugins[]
+  | [ (.name // "" | tostring),
+      (.source | if type == "string" then "local" elif type == "null" then "none" else "external" end),
+      (.source | if type == "string" then . else "" end),
+      (.version // "" | tostring) ]
+  | join("\u001f")' "$MARKETPLACE") \
+  || { echo "marketplace.json を解釈できない: $MARKETPLACE" >&2; exit 2; }
 
 status=0
 listed=""
 
-while IFS=$'\t' read -r name source mversion; do
-  [ -n "$name" ] || continue
+while IFS="$SEP" read -r name kind source mversion; do
+  [ -n "$name$kind$source$mversion" ] || continue
+  if [ -z "$name" ]; then
+    echo "NG  (name なし): marketplace.json のエントリに name が無い (source=${source:-<なし>})" >&2
+    status=1
+    continue
+  fi
+  if [ "$kind" = "external" ]; then
+    echo "--  $name: ローカル以外の source なので対象外"
+    continue
+  fi
+  if [ "$kind" = "none" ] || [ -z "$source" ]; then
+    echo "NG  $name: marketplace.json のエントリに source が無い" >&2
+    status=1
+    continue
+  fi
   rel=${source#./}
+  rel=${rel%/}
   listed="$listed $rel"
   manifest="$ROOT/$rel/.claude-plugin/plugin.json"
   if [ ! -f "$manifest" ]; then
@@ -27,8 +52,8 @@ while IFS=$'\t' read -r name source mversion; do
     status=1
     continue
   fi
-  pversion=$(jq -r '.version // ""' "$manifest" 2>/dev/null) \
-    || { echo "NG  $name: plugin.json を JSON として読めない" >&2; status=1; continue; }
+  pversion=$(jq -r '.version // "" | tostring' "$manifest") \
+    || { echo "NG  $name: plugin.json を JSON として読めない ($rel/.claude-plugin/plugin.json)" >&2; status=1; continue; }
   if [ -z "$mversion" ] || [ "$mversion" != "$pversion" ]; then
     echo "NG  $name: marketplace.json=${mversion:-<なし>} plugin.json=${pversion:-<なし>}" >&2
     status=1
