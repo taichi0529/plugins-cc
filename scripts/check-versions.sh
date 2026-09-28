@@ -19,10 +19,11 @@ listed=""
 
 while IFS=$'\t' read -r name source mversion; do
   [ -n "$name" ] || continue
-  listed="$listed ${source#./}"
-  manifest="$ROOT/${source#./}/.claude-plugin/plugin.json"
+  rel=${source#./}
+  listed="$listed $rel"
+  manifest="$ROOT/$rel/.claude-plugin/plugin.json"
   if [ ! -f "$manifest" ]; then
-    echo "NG  $name: marketplace.json にあるが plugin.json が無い (${source#./}/.claude-plugin/plugin.json)" >&2
+    echo "NG  $name: marketplace.json にあるが plugin.json が無い ($rel/.claude-plugin/plugin.json)" >&2
     status=1
     continue
   fi
@@ -39,7 +40,8 @@ done <<< "$ENTRIES"
 # plugins/ にあるのに marketplace.json に載っていないプラグイン
 for manifest in "$ROOT"/plugins/*/.claude-plugin/plugin.json; do
   [ -f "$manifest" ] || continue
-  dir=$(basename "$(dirname "$(dirname "$manifest")")")
+  dir=${manifest#"$ROOT"/plugins/}
+  dir=${dir%%/*}
   case " $listed " in
     *" plugins/$dir "*) ;;
     *) echo "NG  $dir: plugins/$dir/.claude-plugin/plugin.json があるが marketplace.json に無い" >&2; status=1 ;;
