@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.5
+
+- Fix: `/grok-cc:cancel` now stops foreground jobs. A foreground companion is
+  not a process-group leader, so the group kill failed with ESRCH and the
+  single-process fallback was skipped; the grok turn kept running to the end
+  (seen when Claude Code moved a >600s foreground `task` to the background).
+  `terminateProcessTree` now falls back to signalling the process itself, which
+  forwards SIGTERM to its grok child.
+- Fix: a cancelled job stays `cancelled`. The cancel record is written before
+  the process is signalled, and neither the run's completion nor late progress
+  events overwrite it with `failed` / `completed` or a stale phase.
+
 ## 0.1.4
 
 - Fix: `grok-rescue` no longer adds `--background` to `task` on its own.
