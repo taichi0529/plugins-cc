@@ -1,16 +1,23 @@
 #!/bin/bash
 # pre-commit から呼ぶ check-versions.sh のラッパー。
-# - 対象ファイル (marketplace.json / plugins/*/.claude-plugin/plugin.json) の変更が
-#   ステージに無ければ何もしない。pre-commit の files: は削除を拾わないので、
-#   削除も含めてここで判定する (always_run: true で呼ばれる前提)
+# - 対象ファイル (marketplace.json / plugins/*/.claude-plugin/plugin.json) が
+#   ステージの変更 (削除・対象外への移動を含む) か、pre-commit から渡されたファイル
+#   (--all-files 時は全追跡ファイル) に無ければ何もしない。pre-commit の files: は
+#   削除を拾わないので、判定はここで行う (always_run: true で呼ばれる前提)
 # - 検査はステージ内容 (index) を展開した一時ディレクトリで行う。作業ツリーの
 #   untracked ファイルが結果に混ざらないようにするため
 
 set -u
 
-git diff --cached --name-only \
-  | grep -qE '^(\.claude-plugin/marketplace\.json|plugins/[^/]+/\.claude-plugin/plugin\.json)$' \
-  || exit 0
+TARGET='^(\.claude-plugin/marketplace\.json|plugins/[^/]+/\.claude-plugin/plugin\.json)$'
+
+# --no-renames: 移動を「削除 + 追加」として出し、移動元のパスも判定に含める
+staged=$(git diff --cached --no-renames --name-only) \
+  || { echo "git diff --cached が失敗した" >&2; exit 2; }
+
+if ! printf '%s\n' "$staged" "$@" | grep -qE "$TARGET"; then
+  exit 0
+fi
 
 snapshot=$(mktemp -d) || exit 2
 trap 'rm -rf "$snapshot"' EXIT
