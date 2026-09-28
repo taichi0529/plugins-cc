@@ -14,3 +14,11 @@ repos:
         entry: gitleaks git --staged --redact --no-banner --verbose
         language: system
         pass_filenames: false
+      - id: check-versions
+        name: check-versions (plugin.json と marketplace.json の version 一致)
+        # pre-commit は未ステージの変更を退避してから hook を走らせるので、
+        # スクリプトが読む作業ツリーはコミット内容と一致する
+        entry: bash scripts/check-versions.sh
+        language: system
+        pass_filenames: false
+        files: ^(\.claude-plugin/marketplace\.json|plugins/[^/]+/\.claude-plugin/plugin\.json)$
