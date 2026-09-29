@@ -65,6 +65,7 @@
 | D20 (v0.11.0) | レビュー系実行体 (implement-issue の Step 3.5 `/simplify`・Step 3.6 `/security-review`・Step 5 の project / adversarial) のモデルを `review-model=<名>` 引数で指定可能にし、**既定を `opus`** とする。実装本体 (Step 3) のモデルは変えない。外部レビュアー (codex / grok) は対象外。モデルを渡すために実行体を **Agent 呼び出しに寄せる** (simplify → `code-simplifier:code-simplifier`、security-review / project → `general-purpose` subagent 内で Skill 起動、adversarial → 既に `general-purpose`)。利用不可時の扱いは**明示指定なら停止・既定なら継承へ fail-open** と分ける。設定ファイルには入れない。run-epic は `review-model=` を解釈せず子 prompt へパススルー (`model=` = 子本体、`review-model=` = 子が回すレビュー系) | レビューは見落としの代償が大きく、実装より高いモデルを充てる価値がある一方、実装まで常に高モデルにするのはコストが見合わない — 実装と検証でモデルを分離できるようにする。bundled skill (`/simplify` `/security-review` `/code-review`) は**引数でモデルを取らない**ため、Skill を直接叩く限りモデルは制御できない。subagent 経由なら Agent 呼び出しの `model` パラメタで指定できる (per-invocation override は `model` のみ対応・`effort` は不可) ので、実行体を Agent 側へ寄せた。security-review を subagent に入れる副次効果として「レビューレポートを自分の最終応答にする」実測事故 (Step 5 の警告) が構造的に起きにくくなる。明示値のフォールバック禁止は D15 と同じ (指定したモデルで動いた前提を裏切らない)、既定値の fail-open は D10 / D16 / D17 と同じ (環境依存の追加要素で本体のループを止めない)。設定ファイルに入れないのは D14 / D15 と同じ (コスト許容度は個人の都合でリポジトリの事実ではない) |
 | D21 (v0.12.0) | (1) Step 5 の既定レビュアーに **`grok`** を追加し既定を `["project", "adversarial", "grok"]` に。利用不可 (plugin 未インストール / CLI 未認証) は既存の可用性フォールバックで `grok: 利用不可` として続行。opt-out は `review=` 引数か設定ファイルの `reviewers`。(2) **レビュー系実行体は「互いに独立かつ working tree を書き換えないもの同士」を必ず同一メッセージ内の複数 Agent 呼び出し (同期) で並列起動**する、を原則として明文化。対象はフルラウンドに加えて**差分照合ラウンド**と**修正ループ中の Step 3.6 再実行** (そのラウンドのレビュアーと同時起動)。トリアージは全員の結果が揃ってから。Skill 経路に落ちたロールは並列不可なので Agent 経路の一群の後に実行。**Step 3.5 → 3.6 は直列のまま** | (1) project / adversarial は D20 で同じ `<M>` に寄るため、視点は違ってもモデル由来の盲点は共有する。別エンジンを常設して初めて「独立した検証」になる。既定に入れても fail-open なので、grok を持たない環境の挙動は報告が 1 行増えるだけ。(2) レビュアーが 3 体に増えたぶん、直列だと待ち時間がそのまま積み上がる一方、read-only 同士は並列にしても得られる指摘は変わらない。先着の指摘で修正を始めると残りが古い HEAD を読み行番号がずれるので「揃ってからトリアージ」。simplify は tree を書き換える唯一のレビュー系実行体で、並走させると security-review が整理途中のコードを読み、D17 の「整理済みコードに 1 回」も崩れる。background + SendMessage 方式を使わないのは実測済みの不達のため |
 | D22 (v0.13.0) | **実装とレビューで effort を分ける**。本 plugin に agent 定義を 2 つ持つ: `agents/implementer.md` (`model: opus` / `effort: medium`) と `agents/reviewer.md` (`model: opus` / `effort: high`)。run-epic の子は `general-purpose` ではなく `workflow-cc:implementer` で spawn し、`model=` の既定を「セッション継承」から **opus / medium** に変える (`model=inherit` で旧挙動 = `general-purpose` でセッションのモデル・effort を継承)。implement-issue のレビュー系実行体 (simplify / security-review / project / adversarial) は `workflow-cc:reviewer` で起動し、既定を **opus / high** にする (`review-model=inherit` は `general-purpose` でセッション継承)。既定値は frontmatter に持たせ、既定経路では Agent 呼び出しに `model` を付けない。明示値は `model` パラメタで上書き (effort は frontmatter 固定のまま)。agent type が解決できない環境は `general-purpose` + `model` で起動し「effort 未適用」と報告する。直接起動の implement-issue の実装はセッション設定のまま (skill から切り替えない)。利用不可時の扱いは D15 / D20 と同じ (明示値は停止・既定は継承へ fail-open) | Agent 呼び出しで per-invocation に上書きできるのは `model` だけで、effort は agent 定義の frontmatter でしか指定できない — effort を制御するには plugin 側に agent 定義を持つしかない。実装は opus medium で十分な品質が出る一方、見落としの代償が大きいレビューには high を充てる。既定値を frontmatter に置くのは、呼び出し側が `model` を付け忘れても既定どおり動くようにするため (Agent の `model` パラメタが無視される不具合報告 anthropics/claude-code#83920 もあり、既定経路をパラメタ依存にしない)。skill frontmatter の `model` / `effort` は runtime に反映されない不具合報告 (#84262) があるため、直接起動の実装モデルを skill で切り替える方式は採らない |
+| D23 (v0.14.0) | Step 5 の grok レビュアーに渡す Grok のモデルを `grok-model=<名>` 引数で指定可能にし、**既定を `grok-4.7-build-fast`** とする。依頼文の先頭に `--model <名>` (と `--fresh`) を付けて grok-rescue に渡す。`grok-model=default` で `--model` を付けない (Grok CLI 既定)。`review-model` とは独立。明示値で起動できなければ差し替えず `grok: 利用不可`、既定で起動できなければ CLI 既定で 1 回だけ再依頼。run-epic はパススルー。設定ファイルには入れない | Grok CLI の既定が grok-4.7 に変わってからレビューが 7〜10 分かかるようになり、grok-rescue の Bash 上限 600 秒に迫っていた (超えると結果が返らない)。同じお題の計測 (各 1 回・2 本同時実行) で grok-4.7 high 460s / medium 356s / grok-4.7-build-fast high 301s / medium 138s。指摘は high の 2 本がほぼ同等で、medium は両モデルとも取りこぼしが明確に増えたため、effort は下げずにモデルで速度を取る。`review-model` と兼用しないのは、Claude のモデル名が grok に渡って壊れるため |
 
 ---
 
@@ -392,6 +393,16 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
    - [ ] `/run-epic <N> model=sonnet` で子が `workflow-cc:implementer` + `model: "sonnet"` で spawn される
    - [ ] `/run-epic <N> model=inherit` で子が `general-purpose` + `model` 無しで spawn される
    - [ ] 最終報告に実装側・レビュー側それぞれのモデル / effort と、フォールバックの有無が出る
+
+### Phase 10: grok-model= 引数 (v0.14.0 / D23)
+
+1. Phase 2 と同じ小さな issue 1 件で検証。
+2. 検証項目:
+   - [ ] `grok-model` 未指定で grok-rescue への依頼文の先頭に `--model grok-4.7-build-fast` が付き、`~/.grok/sessions` の該当セッションの `current_model_id` が `grok-4.7-build-fast` になる
+   - [ ] `grok-model=grok-4.7` で `--model grok-4.7` が付く。`grok-model=default` で `--model` が付かない
+   - [ ] `review-model=sonnet` を指定しても grok のモデルは変わらない (逆も同様)
+   - [ ] 存在しないモデルを `grok-model=` で明示すると、差し替えずに `grok: 利用不可` として続行し最終報告に出る
+   - [ ] `/run-epic <N> grok-model=grok-4.7` で子の prompt に `grok-model = grok-4.7` が入る
 
 
 ### 全体の受け入れ条件
