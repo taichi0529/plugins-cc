@@ -23,4 +23,4 @@ snapshot=$(mktemp -d) || exit 2
 trap 'rm -rf "$snapshot"' EXIT
 
 git checkout-index -a --prefix="$snapshot/" || exit 2
-bash "$snapshot/scripts/check-versions.sh"
+bash "$snapshot/scripts/check-versions.sh" --quiet
