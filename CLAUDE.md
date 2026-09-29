@@ -31,7 +31,7 @@ plugins/<name>/
 
 ## 共通の規約
 
-- **バージョンは 2 箇所を一致させる**: プラグインを更新したら `plugins/<name>/.claude-plugin/plugin.json` の `version` と、`marketplace.json` の該当エントリの `version` を**両方**同じ値に上げる。片方だけ上げると不整合になる。`bash scripts/check-versions.sh` で全プラグインの一致を確認できる(不一致・片側欠落は exit 1。`--quiet` で OK 行を省略)。`plugin.json` / `marketplace.json` を含むコミット(削除も含む)では pre-commit がステージ内容に対して自動で実行し、不一致ならコミットが止まる
+- **バージョンは 2 箇所を一致させる**: プラグインを更新したら `plugins/<name>/.claude-plugin/plugin.json` の `version` と、`marketplace.json` の該当エントリの `version` を**両方**同じ値に上げる。片方だけ上げると不整合になる。`bash scripts/check-versions.sh` で全プラグインの一致を確認できる(不一致・片側欠落は exit 1。`--quiet` で OK / `--` 行を省略。NG は常に stderr)。`plugin.json` / `marketplace.json` を含むコミット(削除も含む)では pre-commit がステージ内容に対して自動で実行し、不一致ならコミットが止まる
 - **フックスクリプトの参照はプラグインルート基準**: `hooks/hooks.json` 内のコマンドは `"${CLAUDE_PLUGIN_ROOT}"/scripts/...` の形で参照する(リポジトリルートからの相対パスを直書きしない)
 - **コミット前に gitleaks が走る**(`.pre-commit-config.yaml` + `.gitleaks.toml`)。clone 後に **1 回だけ** `pre-commit install` が必要(git hook はリポジトリに含まれないため)。依存は `brew install pre-commit gitleaks jq`(jq は version 検査用)。既定ルール(API キー / トークン / 秘密鍵)に加えて、**ローカル絶対パス**(`/Users/<name>/` `/home/<name>/`)と**メールアドレス**を検出する — このリポジトリは公開マーケットプレイスなので、環境や所属が分かる情報を載せない。検出されたら `--no-verify` で回避せず内容を直すこと。例示には `/Users/you/` `<name>` `example.com` を使う(allowlist 済み)
 - **`.gitleaks.toml` に固有名詞を書かない**。会社ドメインや案件名を除外リストに書くと、設定ファイル自身が漏洩源になる。ルールは汎用パターンで表現し、allowlist には公開して問題ない例示値だけを置く
