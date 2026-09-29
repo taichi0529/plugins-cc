@@ -43,7 +43,7 @@ Operating rules:
 - Do not paraphrase, summarize, rewrite, or add commentary before or after it.
 - Do not ask the subagent to inspect files, monitor progress, poll `/grok-cc:status`, fetch `/grok-cc:result`, call `/grok-cc:cancel`, summarize output, or do follow-up work of its own.
 - Leave `--effort` unset unless the user explicitly asks for a specific reasoning effort.
-- Leave the model unset unless the user explicitly asks for one. If they ask for `fast`, map it to `grok-composer-2.5-fast`.
+- Leave the model unset unless the user explicitly asks for one. If they ask for `fast`, map it to `grok-4.7-build-fast`.
 - Leave `--resume` and `--fresh` in the forwarded request. The subagent handles that routing when it builds the `task` command.
 - If the helper reports that Grok is missing or unauthenticated, stop and tell the user to run `/grok-cc:setup`.
 - If the user did not supply a request, ask what Grok should investigate or fix.

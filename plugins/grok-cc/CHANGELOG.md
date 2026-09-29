@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Fix: the `fast` model alias now maps to `grok-4.7-build-fast`. It pointed at
+  `grok-composer-2.5-fast`, which the Grok CLI no longer lists.
+
 ## 0.1.5
 
 - Fix: `/grok-cc:cancel` now stops foreground jobs. A foreground companion is
