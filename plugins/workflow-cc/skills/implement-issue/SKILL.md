@@ -293,7 +293,7 @@ git checkout -b <type>/<kebab-summary>
 3. simplify が変更を加えた場合: **解決済みローカルゲートを再実行** (「リポジトリ設定の解決」② を再解決) し、すべて pass するまで Step 4 に進まない。simplify 起因でゲートが落ちた場合は該当の整理を revert してよい (**機能維持が最優先** — simplify は機能を変えない整理だけが目的)
 4. **skip 条件** (いずれかに該当したら skip し、最終報告に明記):
    - 純 docs / コメントのみの変更 (例: `*.md` のみ) → "simplify skipped: docs only"
-   - **diff が小さい**: `git diff <base>...HEAD --shortstat` の追加 + 削除行の合計が **20 行未満** → "simplify skipped: small diff (<20 lines)" (起動コストが期待効果を上回るため)
+   - **diff が小さい**: `git diff <base>...HEAD --shortstat` の追加 + 削除行の合計が **50 行未満** → "simplify skipped: small diff (<50 lines)" (simplify は diff の大小に関係なく 1 回あたり 1〜1.5 分・約 6 万トークンかかり、小さい diff では得られる整理が軽微なため)
 5. **可用性フォールバック**: 上記の第 1〜第 3 選択がいずれも解決できない場合は**停止せず** Step 3.6 へ進み、最終報告に「simplify 利用不可」と明記する
 
 ### Step 3.6: セキュリティレビュー (/security-review — 最初の PR 作成前)
