@@ -41,7 +41,7 @@ node plugins/grok-cc/scripts/grok-companion.mjs status --json
 - `--resume-last` は companion が記録した threadId(= grok sessionId)のみから解決する。`findLatestTaskThread` は常に null(無関係なセッションを誤って resume しないため)
 - 書き込みタスクの touchedFiles は git status の前後差分で算出
 - セッション env への export は固有名 `GROK_COMPANION_DATA` を使う。汎用名 `CLAUDE_PLUGIN_DATA` を export すると、同名を export する同系フォーク(codex plugin)と後勝ちで衝突し、互いの state ディレクトリを乗っ取る(実測でクラッシュ)
-- モデルエイリアス: `fast` → `grok-composer-2.5-fast`。effort は `none..xhigh` に加えて `max` を受け付ける
+- モデルエイリアス: `fast` → `grok-4.7-build-fast`。effort は `none..xhigh` に加えて `max` を受け付ける
 
 ## 注意
 

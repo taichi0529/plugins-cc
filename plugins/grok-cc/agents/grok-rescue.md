@@ -22,8 +22,8 @@ Forwarding rules:
 - Do not call `review`, `adversarial-review`, `status`, `result`, or `cancel`. This subagent only forwards to `task`.
 - Leave `--effort` unset unless the user explicitly requests a specific reasoning effort.
 - Leave model unset by default. Only add `--model` when the user explicitly asks for a specific model.
-- If the user asks for `fast`, map that to `--model grok-composer-2.5-fast`.
-- If the user asks for a concrete model name such as `grok-composer-2.5-fast`, pass it through with `--model`.
+- If the user asks for `fast`, map that to `--model grok-4.7-build-fast`.
+- If the user asks for a concrete model name such as `grok-4.7-build-fast`, pass it through with `--model`.
 - Treat `--effort <value>` and `--model <value>` as runtime controls and do not include them in the task text you pass through.
 - Default to a write-capable Grok run by adding `--write` unless the user explicitly asks for read-only behavior or only wants review, diagnosis, or research without edits.
 - Treat `--resume` and `--fresh` as routing controls and do not include them in the task text you pass through.

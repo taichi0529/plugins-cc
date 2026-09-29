@@ -88,7 +88,7 @@ Node と Grok CLI が利用可能で認証済みかを確認する。このワ�
 | `--background` | rescue サブエージェントをバックグラウンドで実行(Claude 側の制御。`task` には渡されない) |
 | `--resume` | この Claude セッションの直近の再開可能な Grok タスクスレッドを継続(`task --resume-last`) |
 | `--fresh` | 新規スレッドを強制(再開しない) |
-| `--model <name\|fast>` | モデル選択。`fast` → `grok-composer-2.5-fast` |
+| `--model <name\|fast>` | モデル選択。`fast` → `grok-4.7-build-fast` |
 | `--effort <level>` | 推論エフォート: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 
 `--resume` も `--fresh` も指定されていない場合、コマンドは(`task-resume-candidate` を介して)前のスレッドを継続するか一度だけ確認することがある。`--wait` も `--background` も指定されていない場合のデフォルトはフォアグラウンド。
@@ -263,7 +263,7 @@ node scripts/grok-companion.mjs task \
 | `--background` | ジョブをキューに入れ、detached な `task-worker` を起動 |
 | `--resume` / `--resume-last` | この Claude セッションの直近の完了タスクスレッドを再開 |
 | `--fresh` | 明示的に再開しない(resume 系フラグと排他) |
-| `--model` / `-m` | モデル名またはエイリアス `fast` → `grok-composer-2.5-fast` |
+| `--model` / `-m` | モデル名またはエイリアス `fast` → `grok-4.7-build-fast` |
 | `--effort` | Grok CLI に `--reasoning-effort` として渡される推論エフォート |
 
 プロンプト・プロンプトファイル・stdin パイプ・`--resume-last`/`--resume` のいずれもない場合、`task` はエラーになる。
@@ -354,7 +354,7 @@ restrict_network = false
 ## モデルとエフォート
 
 - モデル未指定時は Grok CLI のデフォルト(例: `grok-4.5`)
-- `--model fast` は `grok-composer-2.5-fast` のエイリアス
+- `--model fast` は `grok-4.7-build-fast` のエイリアス
 - `--effort` は `none|minimal|low|medium|high|xhigh|max`
 
 ## ライセンス

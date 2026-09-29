@@ -88,7 +88,7 @@ Delegate investigation, diagnosis, or an explicit fix to Grok via the `grok-cc:g
 | `--background` | Run the rescue subagent in the background (Claude-side; not passed to `task`) |
 | `--resume` | Continue the latest resumable Grok task thread for this Claude session (`task --resume-last`) |
 | `--fresh` | Force a new thread (do not resume) |
-| `--model <name\|fast>` | Select model; `fast` → `grok-composer-2.5-fast` |
+| `--model <name\|fast>` | Select model; `fast` → `grok-4.7-build-fast` |
 | `--effort <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 
 If neither `--resume` nor `--fresh` is set, the command may ask whether to continue a previous thread (via `task-resume-candidate`). If neither `--wait` nor `--background` is set, the default is foreground.
@@ -263,7 +263,7 @@ node scripts/grok-companion.mjs task \
 | `--background` | Queue the job and spawn a detached `task-worker` |
 | `--resume` / `--resume-last` | Resume the latest finished task thread for this Claude session |
 | `--fresh` | Explicitly do not resume (mutually exclusive with resume flags) |
-| `--model` / `-m` | Model name or alias `fast` → `grok-composer-2.5-fast` |
+| `--model` / `-m` | Model name or alias `fast` → `grok-4.7-build-fast` |
 | `--effort` | Reasoning effort passed as `--reasoning-effort` to the Grok CLI |
 
 Without a prompt, a prompt file, piped stdin, or `--resume-last`/`--resume`, `task` errors.
@@ -354,7 +354,7 @@ For ad-hoc overrides, `GROK_COMPANION_SANDBOX_READ_ONLY` / `GROK_COMPANION_SANDB
 ## Models and effort
 
 - With no model specified, the Grok CLI default is used (e.g. `grok-4.5`)
-- `--model fast` is an alias for `grok-composer-2.5-fast`
+- `--model fast` is an alias for `grok-4.7-build-fast`
 - `--effort` accepts `none|minimal|low|medium|high|xhigh|max`
 
 ## License
