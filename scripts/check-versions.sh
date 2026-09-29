@@ -1,9 +1,21 @@
 #!/bin/bash
 # plugins/<name>/.claude-plugin/plugin.json と .claude-plugin/marketplace.json の
 # version が全プラグインで一致しているかを検査する。
-#   exit 0: 全一致 / exit 1: 不一致・片側欠落あり / exit 2: 実行環境の問題 (jq 無し等)
+#   exit 0: 全一致 / exit 1: 不一致・片側欠落あり / exit 2: 実行環境の問題 (jq 無し等)・引数誤り
+#   --quiet: OK 行と対象外 (--) 行を出さない。NG 行とエラーは常に stderr に出す
 
 set -u
+
+quiet=0
+for arg in "$@"; do
+  case $arg in
+    --quiet) quiet=1 ;;
+    *) echo "usage: $(basename "$0") [--quiet]" >&2; exit 2 ;;
+  esac
+done
+
+# 正常系の情報行。--quiet のときは出さない
+info() { [ "$quiet" -eq 1 ] || echo "$1"; }
 
 command -v jq >/dev/null 2>&1 || { echo "jq が見つからない (brew install jq)" >&2; exit 2; }
 
@@ -39,7 +51,7 @@ while IFS="$SEP" read -r name kind source mversion; do
     continue
   fi
   if [ "$kind" = "external" ]; then
-    echo "--  $name: ローカル以外の source なので対象外"
+    info "--  $name: ローカル以外の source なので対象外"
     continue
   fi
   if [ "$kind" = "none" ] || [ -z "$source" ]; then
@@ -59,7 +71,7 @@ while IFS="$SEP" read -r name kind source mversion; do
     echo "NG  $name: marketplace.json=${mversion:-<なし>} plugin.json=${pversion:-<なし>}" >&2
     status=1
   else
-    echo "OK  $name $pversion"
+    info "OK  $name $pversion"
   fi
 done <<< "$ENTRIES"
 
