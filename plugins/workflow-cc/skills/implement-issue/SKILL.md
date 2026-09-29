@@ -131,7 +131,8 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 | security-review (Step 3.6) | `<R>` の中で Skill ツールから `security-review` を起動させる | 両方 |
 | project (Step 5) | `<R>` の中で、リポジトリの review skill / 公式 `/code-review` を起動させる | 両方 (公式 `/code-review` が内部でさらに fork する分までは制御できない) |
 | adversarial (Step 5) | `<R>` | 両方 |
-| codex / grok (Step 5) | `Agent(subagent_type: "codex:codex-rescue" / "grok-cc:grok-rescue")` | **対象外** — 実際にレビューするのは外部 CLI 側のエンジン。`review-model` は渡さない (grok のモデルは「grok レビュアーのモデル解決」の `grok-model` で決める) |
+| codex (Step 5) | `Agent(subagent_type: "codex:codex-rescue")` | **対象外** — 実際にレビューするのは外部 CLI 側のエンジン。`review-model` は渡さない |
+| grok (Step 5) | grok-cc の companion を Bash で直接起動 (「grok レビュアーの実行」) | **対象外** — Grok のモデルは「grok レビュアーのモデル解決」の `grok-model` で決める |
 
 **最終報告に「どのロールにどのモデル・effort が実際に適用されたか」を書く** (適用できなかったロールは理由付きで)。ここを書かないと「opus high でレビューしたつもりが継承モデルだった」という取り違えが検出できない。
 
@@ -139,15 +140,15 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 
 Step 5 の `grok` レビュアーに使わせる Grok のモデルを決める。`review-model` (Claude 側のレビュー系実行体) とは別の引数で、互いに影響しない。
 
-| 指定 | grok-rescue へ渡す依頼文 | 使われるモデル |
+| 指定 | companion に渡す引数 | 使われるモデル |
 |---|---|---|
-| 省略 (既定) | 先頭に `--model grok-4.7-build-fast` を付ける | `grok-4.7-build-fast` |
-| `grok-model=<モデル名>` (例: `grok-model=grok-4.7`。「grok は 4.7 で」等の自然言語も同義) | 先頭に `--model <モデル名>` を付ける | 指定モデル (grok-cc のエイリアス `fast` も可) |
+| 省略 (既定) | `--model grok-4.7-build-fast` | `grok-4.7-build-fast` |
+| `grok-model=<モデル名>` (例: `grok-model=grok-4.7`。「grok は 4.7 で」等の自然言語も同義) | `--model <モデル名>` | 指定モデル (grok-cc のエイリアス `fast` も可) |
 | `grok-model=default` | `--model` を付けない | Grok CLI の既定モデル |
 
-- 既定を `grok-4.7-build-fast` にするのは速度のため。同じレビューで Grok CLI 既定の grok-4.7 (effort high) より 3 割ほど短く、本物の指摘の拾い方はほぼ同等だった。grok-rescue の Bash 呼び出しには 600 秒の上限があり、超えるとレビュー結果が返らない。effort は下げない (medium では指摘の取りこぼしが明確に増えた)
+- 既定を `grok-4.7-build-fast` にするのは速度のため。同じレビューで Grok CLI 既定の grok-4.7 (effort high) より 3 割ほど短く、本物の指摘の拾い方はほぼ同等だった。effort は下げない (medium では指摘の取りこぼしが明確に増えた)
 - 値の allowlist は本 SKILL に持たない (利用可能なモデルは `grok models` で環境ごとに変わる)。値が空なら実行せずエラーを報告して停止
-- 利用不可時: **明示した値**で Grok が起動できなかった (モデル不明等) 場合は、別モデルに差し替えず `grok: 利用不可 (grok-model=<値>)` として続行する。**既定**の `grok-4.7-build-fast` で起動できなかった場合は、同じラウンドで `--model` 無し (CLI 既定) で 1 回だけ再依頼し、最終報告に明記する
+- 利用不可時: **明示した値**で Grok が起動できなかった (モデル不明等) 場合は、別モデルに差し替えず `grok: 利用不可 (grok-model=<値>)` として続行する。**既定**の `grok-4.7-build-fast` で起動できなかった場合は、同じラウンドで `--model` 無し (CLI 既定) で 1 回だけ再実行し、最終報告に明記する
 - `.claude/workflow-cc.json` には入れない (`review-model` と同じ理由)
 
 ## 成功条件 (全部満たしたら success を返す)
@@ -376,7 +377,7 @@ EOF
 | Step 5 の差分照合ラウンド | 再実行対象になったレビュアー全員 |
 | Step 5 のラウンド中に Step 3.6 の再実行が必要になった場合 (セキュリティに敏感な修正を入れた) | そのラウンドのレビュアー + security-review を同じメッセージで起動 |
 
-- 並列化の手段は**同一メッセージ内の複数 Agent 呼び出し (同期) に限る**。background 起動 + SendMessage 返信方式は、返信の宛先不達・通知の迷子が実測で発生している
+- 並列化の手段は**同一メッセージ内の複数 Agent 呼び出し (同期) に限る**。background 起動 + SendMessage 返信方式は、返信の宛先不達・通知の迷子が実測で発生している。例外は grok で、companion の Bash を同じメッセージ内で `run_in_background: true` で起動する (「grok レビュアーの実行」)
 - **全員の結果が揃ってからトリアージする** (先に返ってきた 1 体の指摘で修正を始めない — 残りのレビュアーが古い HEAD を読むことになり、指摘と行番号がずれる)
 - Skill 経路に落ちたロール (モデル・effort 未適用) は現セッションで動くため並列にできない。**Agent 経路のロールを先に並列起動し、その結果を受け取ってから** Skill 経路のロールを実行する
 - **並列にしないもの**: Step 3.5 (`/simplify`) → Step 3.6 (`/security-review`) は**直列のまま**。simplify は working tree を書き換える唯一のレビュー系実行体で、並走させると security-review が整理途中のコードを読む。「整理済みのコードに対して 1 回で済ませる」という Step 3.6 の前提も崩れる
@@ -389,7 +390,7 @@ EOF
 
 - **`project`**: `<R>` を起動し、その中で review skill を実行させる。使わせる skill は「リポジトリに project 用 review skill (`.claude/skills/code-review-project/` が慣例) があればそれ (Gotcha リスト等のリポジトリ固有知見を含むため素の公式 skill より優先)、無ければ公式 `/code-review`」の順で、**親が起動前に解決して prompt に名前で埋め込む** (子に探させない)。prompt には「自分では修正せず指摘を構造化して返せ」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 も入れる。subagent 経路が使えない環境では現セッションから Skill ツールで直接起動し「project: model/effort 未適用 (Skill 経路)」と最終報告に明記する。`/security-review` は **Step 3.6 で PR 作成前に実行済みのためここでは再実行しない** (二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 の規則に従い再実行する
 - **`codex`**: `Agent(subagent_type: "codex:codex-rescue")` — **`model` は渡さない** (実際にレビューするのは外部 CLI 側のエンジン)
-- **`grok`** (既定に含まれる): `Agent(subagent_type: "grok-cc:grok-rescue")` — Agent の `model` は渡さない。Grok 側のモデルは「grok レビュアーのモデル解決」で決めた `--model` を依頼文の先頭に付けて渡す。依頼文には `--fresh` も付ける (前回の grok スレッドを誤って resume しないため)
+- **`grok`** (既定に含まれる): 下記「grok レビュアーの実行」の手順で companion を直接起動する
 - **`adversarial`** (既定に含まれる): `<R>` で**実装とは独立したコンテキスト**の red-team レビューを起動する (実装した本人のコンテキストで自己批判させない — 自己整合バイアスで甘くなる)。prompt に埋め込む:
   - ローカル repo の絶対パス・レビュー対象ブランチ名・ベースブランチ名 (diff は `git diff <base>...<branch>` 等ローカル git で取らせる)
   - **Issue 本文の全文** (受け入れ条件込み)
@@ -397,7 +398,28 @@ EOF
   - 出力形式の指定: 指摘ごとに「対象ファイル:行 / 壊れるシナリオ (入力・状態 → 期待 vs 実際) / 根拠 / 修正案」
   - セキュリティ脆弱性は Step 3.6 (/security-review) の担当 — adversarial は**機能の破壊**にフォーカスする (発見したら報告してよいが主目的にしない)
 
-**外部レビュアー (codex / grok) には GitHub を参照させない** (実行環境から GitHub API に届かない実績のある罠)。prompt に以下を直接埋め込む:
+#### grok レビュアーの実行 (companion を直接呼ぶ)
+
+grok は **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず**、grok-cc の companion スクリプトを Bash で直接起動する。転送役を挟むと、フラグ (`--model` 等) の欠落・Grok を起動せずに自分で答える代行・転送役向けの指示を Grok が読んで CLI を入れ子起動する、が実測で起きたため。
+
+1. **companion の場所を解決する** (ラウンドごとに 1 回):
+   ```bash
+   G=$(claude plugin list --json | jq -r '[.[] | select((.id | startswith("grok-cc@")) and .enabled)][0].installPath // empty')
+   ```
+   空なら grok-cc が未インストール / 無効 → `grok: 利用不可 (grok-cc 未インストール)` として続行する
+2. **起動する**: 他のレビュアーの Agent 呼び出しと**同じメッセージ内**で、Bash を `run_in_background: true` で起動する (Bash の同期実行は 600 秒で打ち切られるため background にする。完了は通知で受け取る)。出力先は `mktemp -d` で作った一時ディレクトリ `<out>`:
+   ```bash
+   node "$G/scripts/grok-companion.mjs" adversarial-review \
+     --cwd <リポジトリの絶対パス> --base <比較基準> [--model <grok のモデル>] --json \
+     "<フォーカス文>" > <out>/grok.json 2> <out>/grok.log
+   ```
+   - `--base`: フルラウンドは `<base>` (ベースブランチ)、差分照合ラウンドは前ラウンドの HEAD SHA (= 修正 diff だけが対象になる)
+   - `--model`: 「grok レビュアーのモデル解決」で決めた値。`grok-model=default` なら付けない
+   - フォーカス文: フルラウンドは「Issue #<N> の受け入れ条件に照らしてレビューせよ」+ **Issue 本文の全文**。差分照合ラウンドは「前ラウンドの指摘が解消されたか、修正 diff 自体に新たな問題が無いかだけを判定せよ」+ 前ラウンドの採用指摘リスト
+   - diff は companion がローカル git から集める (GitHub は参照しない)。レビュー中は**作業ツリーを書き換えない** (Grok は作業ツリーを読む)
+3. **結果を読む**: `<out>/grok.json` を `jq` で読む。`.grok.status == 0` かつ `.parseError == null` なら成功で、`.result.verdict` (`approve` / `needs-attention`)、`.result.summary`、`.result.findings[]` (`file` / `line_start` / `line_end` / `confidence` (0〜1) / `recommendation` 等) を使う。それ以外 (JSON が空・非 0 終了・parseError) は `grok: 利用不可 (<grok.log の要点>)`。読み終えたら `rm -f <out>/grok.json <out>/grok.log && rmdir <out>` で片付ける (`rm -rf` は権限設定で拒否されやすいため使わない)
+
+**codex には GitHub を参照させない** (実行環境から GitHub API に届かない実績のある罠)。prompt に以下を直接埋め込む:
 
 - ローカル repo の絶対パス
 - レビュー対象ブランチ名とベースブランチ名 (diff は `git diff <base>...<branch>` 等ローカル git で取らせる)
@@ -406,15 +428,14 @@ EOF
 
 **可用性フォールバック**: 指定された agent type / skill が環境に存在しなければ、**停止せず**「<name> は利用不可、残りで続行」として続行し、最終報告に明記する。
 
-**エンジン実起動の確認 (実測で発生した罠)**: rescue 系 agent は外部 CLI (Codex / Grok) を呼べない時に**黙って Claude 自身が代行レビュー**することがある。それでは「独立した別エンジンの視点」という外部レビュアーの目的が満たされない。対策:
-- **codex**: prompt に必ず含める: 「**外部 CLI (Codex) を実際に起動し、その出力に基づいて報告せよ。CLI が起動できない (未認証・未インストール等) 場合は代行レビューをせず『利用不可: <理由>』とだけ返せ**。報告の冒頭にエンジン実起動の有無を明記せよ」
-- **grok**: この一文は prompt に**入れない**。grok-rescue は依頼文をそのまま Grok に転送するため、Grok 自身がこの指示を読んで自分の中から Grok CLI をもう一度起動してしまう (実測: 余分なセッションが 2 つ増え、「OK と返すだけ」の依頼が 20 秒から 91 秒に延びた)。起動できない場合の扱いは grok-rescue 側の約束 (`Grok unavailable: <理由>` の 1 行だけを返し、代わりに回答しない) に任せる
-- 判定: 応答が `利用不可` / `Grok unavailable` で始まる場合、または grok の応答に Grok のセッション ID (companion の `Session ready (<id>)` 等) が含まれない場合は、そのレビュアーを「利用不可」として扱い (代行レビューの内容自体は参考情報として扱ってよい)、最終報告に正確に記載する。codex は応答冒頭のエンジン実起動の明示で判定する
+**codex のエンジン実起動の確認 (実測で発生した罠)**: rescue 系 agent は外部 CLI を呼べない時に**黙って Claude 自身が代行レビュー**することがある。それでは「独立した別エンジンの視点」という外部レビュアーの目的が満たされない (grok は companion を直接呼ぶのでこの問題は無い)。対策:
+- prompt に必ず含める: 「**外部 CLI (Codex) を実際に起動し、その出力に基づいて報告せよ。CLI が起動できない (未認証・未インストール等) 場合は代行レビューをせず『利用不可: <理由>』とだけ返せ**。報告の冒頭にエンジン実起動の有無を明記せよ」
+- 応答にエンジン実起動の明示が無い/代行だった場合は、そのレビュアーを「利用不可」として扱い (代行レビューの内容自体は参考情報として扱ってよい)、最終報告に正確に記載する
 
 #### 採否判定とゲート
 
 - project レビューの指摘: **must-fix (信頼度 ≥80)** と **security HIGH / MEDIUM** は Step 3 に戻って対応 (次の試行で修正)。security LOW は判断に委ね、却下時は理由を最終報告に添える。**advisory (信頼度 60-79)** は却下可、ただし件数と内容を最終報告に添える
-- 外部レビュアー (codex / grok) と adversarial の指摘には confidence スコアが無いので、**1 件ずつトリアージ**して「採用 (must-fix 扱い → Step 3 で対応) / 却下 (理由必須)」に振り分ける。adversarial の指摘は**再現シナリオの具体性**で判定する (シナリオが実際に成立するかをコードで確認してから採否を決める)
+- 外部レビュアー (codex / grok) と adversarial の指摘は、**1 件ずつトリアージ**して (grok の `confidence` は 0〜1 の参考値で、project の閾値とは対応しない)「採用 (must-fix 扱い → Step 3 で対応) / 却下 (理由必須)」に振り分ける。adversarial の指摘は**再現シナリオの具体性**で判定する (シナリオが実際に成立するかをコードで確認してから採否を決める)
 - レビュー結果 (却下した指摘とその理由を含む) を **PR コメントとして投稿** (`gh pr comment <PR> --body "..."`) — 人間が後から採否判定を検証できるように。PR が未作成の場合 (push 拒否等) は同内容を最終報告に記載する
 - 純 docs / コメントのみの PR (例: `*.md` のみの変更) は **scope 外で skip 可**、最終報告に「review skipped: docs only」と明記
 - **must-fix + security HIGH/MEDIUM + 採用済み外部指摘 が全て 0 件 (skip 含む) を確認できたら、即座に Step 6 へ進む。ここで親へ return しない**
