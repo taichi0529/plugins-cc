@@ -4,16 +4,42 @@
 #   exit 0: 全一致 / exit 1: 不一致・片側欠落あり / exit 2: 実行環境の問題 (jq 無し等)・引数誤り
 #   --quiet: OK 行と対象外 (--) 行を出さない。NG 行とエラーは常に stderr に出す
 #   (--quiet は stdout ごと捨てる実装。抑止してよい情報行以外は必ず >&2 で出すこと)
+#   -h, --help: 使い方を stdout に出して exit 0 (検査はしない)
 
 set -u
 
+usage() {
+  cat <<EOF
+usage: $(basename "$0") [--quiet] [-h|--help]
+
+plugin.json と marketplace.json の version が全プラグインで一致しているかを検査する。
+
+options:
+  --quiet     OK 行と対象外 (--) 行を出さない (NG 行とエラーは常に stderr)
+  -h, --help  この使い方を表示して終了する
+
+exit status:
+  0  全プラグインで一致
+  1  不一致・片側欠落あり
+  2  実行環境の問題 (jq 無し等)・引数誤り
+EOF
+}
+
 quiet=0
+help=0
 for arg in "$@"; do
   case $arg in
     --quiet) quiet=1 ;;
-    *) echo "usage: $(basename "$0") [--quiet]" >&2; exit 2 ;;
+    -h|--help) help=1 ;;
+    *) usage >&2; exit 2 ;;
   esac
 done
+
+# --help は --quiet より先に処理する (使い方を stdout ごと捨てないため)
+if [ "$help" -eq 1 ]; then
+  usage
+  exit 0
+fi
 
 # stdout に出るのは OK / -- 行だけ (NG とエラーは stderr) なので、stdout ごと捨てる
 [ "$quiet" -eq 1 ] && exec >/dev/null
