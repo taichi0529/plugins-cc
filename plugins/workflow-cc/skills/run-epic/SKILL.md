@@ -1,6 +1,6 @@
 ---
 name: run-epic
-description: EPIC issue 番号を渡すと、その Sub-issues を GitHub API で取得し、未クローズの子 issue を子エージェント (workflow-cc:implementer = 既定 opus / effort medium, isolation=worktree) に委譲して実装するオーケストレーター skill (リポジトリ非依存)。既定は直列。parallel=N 指定時は依存宣言 (depends on / Target scope) の機械解析で独立と判定できた子だけを wave 並列する。各子は implement-issue のアルゴリズムを内部ループで完走させ、ローカルゲート通過 → PR 作成まで担い、親に構造化結果を返す。自動 merge はしない (merge は人間)。「EPIC #252 を回して」「run epic 252」「EPIC の sub-issue を全部実装」などのリクエスト時に使用。引数は EPIC 番号 + 任意の parallel= / model= / review-model= 指定 (例 252 parallel=2 model=sonnet review-model=opus)。
+description: EPIC issue 番号を渡すと、その Sub-issues を GitHub API で取得し、未クローズの子 issue を子エージェント (workflow-cc:implementer = 既定 opus / effort medium, isolation=worktree) に委譲して実装するオーケストレーター skill (リポジトリ非依存)。既定は直列。parallel=N 指定時は依存宣言 (depends on / Target scope) の機械解析で独立と判定できた子だけを wave 並列する。各子は implement-issue のアルゴリズムを内部ループで完走させ、ローカルゲート通過 → PR 作成まで担い、親に構造化結果を返す。自動 merge はしない (merge は人間)。「EPIC #252 を回して」「run epic 252」「EPIC の sub-issue を全部実装」などのリクエスト時に使用。引数は EPIC 番号 + 任意の parallel= / model= / review-model= / grok-model= 指定 (例 252 parallel=2 model=sonnet review-model=opus)。
 ---
 
 # Run-Epic Skill (EPIC Sub-issue オーケストレーション・汎用)
@@ -36,6 +36,9 @@ EPIC issue にぶら下がる **Sub-issues を実装するオーケストレー�
   - 省略時は子側の既定 (`opus` / effort high) が効く。レビューも子と同じモデル・effort で回したいなら `review-model=inherit` を明示する
   - 外部レビュアー (codex / grok) には適用されない (レビューするのは外部 CLI 側のエンジン)
   - `model=` と同じく設定ファイルには入れない
+- 任意: `grok-model=<モデル名>` (例: `252 grok-model=grok-4.7`)。他の引数と順不同で併用可
+  - 子が回す Step 5 の grok レビュアーに使わせる Grok のモデル。親は値を解釈せず**そのまま子の prompt に埋め込む**。解決規則と既定値 (**`grok-4.7-build-fast`**)・`grok-model=default`・利用不可時の扱いは implement-issue SKILL.md の「grok レビュアーのモデル解決」が正典
+  - `model=` / `review-model=` とは別物で、Claude 側のモデルには影響しない。設定ファイルには入れない
 
 ## リポジトリ設定の解決 (起動時に 1 回)
 
@@ -170,7 +173,7 @@ spawn 前にバッチ共通の準備を親が行う:
 - `isolation`: `"worktree"` (必須 — 親の cwd を汚さない)
 - `model`: `model=<モデル名>` の指定時のみその値を渡す。未指定・`inherit` なら**このパラメタ自体を付与しない** (未指定 = frontmatter の opus、`inherit` = セッションモデル)。**`review-model=` の値をここに渡してはいけない** (別物)
 - `description`: `Issue #<N> 実装 + ローカルゲート pass + PR 作成`
-- `prompt`: 下記テンプレ (`<N>` = Sub-issue 番号、`<base>` = ベースブランチ、`<SKILL_PATH>` = 親が解決した implement-issue SKILL.md の絶対パス、`<assigned-branch>` = 親が割り当てたブランチ名、`<BASE_SHA>` = 捕捉した base SHA、`<REVIEW_MODEL>` = `review-model=` の値 (未指定なら文字列 `既定 (opus / effort high)`)、に置換)
+- `prompt`: 下記テンプレ (`<N>` = Sub-issue 番号、`<base>` = ベースブランチ、`<SKILL_PATH>` = 親が解決した implement-issue SKILL.md の絶対パス、`<assigned-branch>` = 親が割り当てたブランチ名、`<BASE_SHA>` = 捕捉した base SHA、`<REVIEW_MODEL>` = `review-model=` の値 (未指定なら文字列 `既定 (opus / effort high)`)、`<GROK_MODEL>` = `grok-model=` の値 (未指定なら文字列 `既定 (grok-4.7-build-fast)`)、に置換)
 
 ```
 あなたはこのリポジトリの実装エージェントです。
@@ -201,6 +204,7 @@ review 0 件はタスクの途中です。親への return は、Phase B で次�
 
 2. <SKILL_PATH> を Read して、その「リポジトリ設定の解決」「レビュー系実行体のモデル解決」「アルゴリズム」「イデンポテント実行手順」セクションに従って Issue #<N> を実装する。
    - **review-model = <REVIEW_MODEL>**。Step 3.5 (/simplify) / Step 3.6 (/security-review) / Step 5 (project・adversarial) の実行体をこのモデルで起動する (SKILL.md の「レビュー系実行体のモデル解決」の適用範囲表と、利用不可時の扱いに従う)。外部レビュアー (codex / grok) には渡さない。実装作業そのもの (Step 3) のモデルは変えない
+   - **grok-model = <GROK_MODEL>**。Step 5 の grok レビュアーに渡す Grok のモデル (SKILL.md の「grok レビュアーのモデル解決」に従う)
    - 内部ループで最大 10 試行。各試行で状態自己診断 → 次の1歩 → 次の試行
    - ローカルゲートが全て pass するたびに、その時点の `git rev-parse HEAD` を記録しておく (Phase B の skip 判定に使う)
    - リポジトリの CLAUDE.md / .claude/rules/ を必ず読んで従う (規約・Gotcha はそちらが正)
@@ -228,7 +232,7 @@ review 0 件はタスクの途中です。親への return は、Phase B で次�
    - 主な変更点 2-3 行
    - implement-issue が消費した試行回数 (attempts)
    - レビュアーごとの指摘件数と採否 (却下した advisory は 1 行で要約)
-   - レビュー系のモデル・effort の解決値と実際の適用状況 (既定が利用不可で継承に落ちた / effort 未適用の経路や Skill 経路に落ちたロールがあれば明記)
+   - レビュー系のモデル・effort の解決値と実際の適用状況 (既定が利用不可で継承に落ちた / effort 未適用の経路や Skill 経路に落ちたロールがあれば明記)。grok のモデル (既定から CLI 既定へ落ちた等があれば明記)
    - 想定外があれば 1-2 行
 
 Phase B のゲート失敗 / max_attempts 到達 / その他停止すべき問題 (permission 拒否等) に遭遇したら、親に "failure: <理由>" で返してください。Phase A 中のゲート失敗は implement-issue の内部ループ (Step 3 での修正) で扱い、それ以外のリトライや回避策は子側で行わず親が判断します。
@@ -319,7 +323,7 @@ ready-set のバッチ列を処理し切ったら:
    ```
 
 2. ユーザーへの最終報告:
-   - EPIC #$ARGUMENTS の処理サマリ / 実装 Sub-issue 数 / 使用した parallel / 子のモデル・effort (未指定なら「既定 opus / medium」、`inherit` なら「セッション継承」。フォールバックが起きたらその旨) / review-model 値 (未指定なら「既定 opus / high」) と、子から集めた実際の適用状況
+   - EPIC #$ARGUMENTS の処理サマリ / 実装 Sub-issue 数 / 使用した parallel / 子のモデル・effort (未指定なら「既定 opus / medium」、`inherit` なら「セッション継承」。フォールバックが起きたらその旨) / review-model 値 (未指定なら「既定 opus / high」) / grok-model 値 (未指定なら「既定 grok-4.7-build-fast」) と、子から集めた実際の適用状況
    - バッチ構成と根拠 (parallel ≥ 2 のとき)・依存 merge 待ちで未処理の子
    - config_source (workflow-cc / auto-derive) と旧 `.claude/workflow.json` 検出時のリネーム案内 (該当時)
    - 全 PR URL (merge 待ちリスト、対応する `Closes #<N>` 付き)
@@ -358,6 +362,7 @@ ready-set のバッチ列を処理し切ったら:
 /run-epic 252 parallel=2 model=sonnet
 /run-epic 252 model=sonnet review-model=opus
 /run-epic 252 model=inherit
+/run-epic 252 grok-model=grok-4.7
 ```
 
 → EPIC #252 の OPEN な Sub-issues を処理し、各 PR を作成して merge 待ちにする。既定は上から順の直列。`parallel=2` では独立性トリアージで並列可と判定された子だけを最大 2 体ずつ同時実行する。子エージェントは既定で opus / effort medium で動き、`model=sonnet` を足すと sonnet / medium になる (`model=inherit` でセッションのモデル・effort を継承)。子が回すレビュー系 (simplify / security-review / project / adversarial) は既定で opus / effort high — 「実装は opus medium・レビューは opus high」が既定形。`review-model=sonnet` 等でレビュー側のモデルだけ変えられる。途中で停止した場合は、原因を直してから同じコマンドを再実行すれば、未処理 (OPEN かつ verified-ready な PR を持たない) の Sub-issue から再開する。

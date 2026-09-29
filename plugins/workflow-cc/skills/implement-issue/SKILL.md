@@ -1,6 +1,6 @@
 ---
 name: implement-issue
-description: GitHub Issue を内部ループで end-to-end 実装するスキル (リポジトリ非依存)。ブランチ作成 → 実装 → ローカル検証 → コード整理 (/simplify) → セキュリティレビュー (/security-review) → コミット → push → PR 作成 → コードレビュー → 修正までを「現在の状態を読み直し、次の1歩を進める」を最大10回繰り返して完了させる。「Issue 実装して」「#123 を実装」「implement issue」「イシューを実装」などのリクエスト時に使用。引数は Issue 番号 + 任意の review= / review-model= 指定 (例 `42 review=codex,grok review-model=opus`)。
+description: GitHub Issue を内部ループで end-to-end 実装するスキル (リポジトリ非依存)。ブランチ作成 → 実装 → ローカル検証 → コード整理 (/simplify) → セキュリティレビュー (/security-review) → コミット → push → PR 作成 → コードレビュー → 修正までを「現在の状態を読み直し、次の1歩を進める」を最大10回繰り返して完了させる。「Issue 実装して」「#123 を実装」「implement issue」「イシューを実装」などのリクエスト時に使用。引数は Issue 番号 + 任意の review= / review-model= / grok-model= 指定 (例 `42 review=codex,grok review-model=opus grok-model=grok-4.7`)。
 ---
 
 # Issue Implementation Skill (汎用)
@@ -12,6 +12,7 @@ GitHub Issue の実装を、ブランチ作成から PR 作成・レビュー対
 - 第1引数: Issue 番号 (例: `42`, `#42`)
 - 任意: `review=<reviewer,...>` (例: `review=codex,grok`)。省略時の既定は `project,adversarial,grok`。自然言語での指定 (「codex でもレビューして」) も同義に解釈する
 - 任意: `review-model=<モデル名>` (例: `review-model=sonnet`)。レビュー系実行体 (Step 3.5 / 3.6 / 5) を走らせるモデル。省略時の既定は **`opus` (effort high)**。詳細は「レビュー系実行体のモデル解決」を参照
+- 任意: `grok-model=<モデル名>` (例: `grok-model=grok-4.7`)。Step 5 の grok レビュアーに使わせる Grok のモデル。省略時の既定は **`grok-4.7-build-fast`**。詳細は「grok レビュアーのモデル解決」を参照
 - **`model=` は受け付けない**。指定された場合は実行せず「implement-issue に `model=` は無い。レビュー系のモデルは `review-model=`、run-epic の子エージェントのモデルは run-epic 側の `model=`」と報告して停止する (黙って `review-model` と読み替えない)
 
 ## 動作モード
@@ -130,9 +131,24 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 | security-review (Step 3.6) | `<R>` の中で Skill ツールから `security-review` を起動させる | 両方 |
 | project (Step 5) | `<R>` の中で、リポジトリの review skill / 公式 `/code-review` を起動させる | 両方 (公式 `/code-review` が内部でさらに fork する分までは制御できない) |
 | adversarial (Step 5) | `<R>` | 両方 |
-| codex / grok (Step 5) | `Agent(subagent_type: "codex:codex-rescue" / "grok-cc:grok-rescue")` | **対象外** — 実際にレビューするのは外部 CLI 側のエンジン。`review-model` は渡さない |
+| codex / grok (Step 5) | `Agent(subagent_type: "codex:codex-rescue" / "grok-cc:grok-rescue")` | **対象外** — 実際にレビューするのは外部 CLI 側のエンジン。`review-model` は渡さない (grok のモデルは「grok レビュアーのモデル解決」の `grok-model` で決める) |
 
 **最終報告に「どのロールにどのモデル・effort が実際に適用されたか」を書く** (適用できなかったロールは理由付きで)。ここを書かないと「opus high でレビューしたつもりが継承モデルだった」という取り違えが検出できない。
+
+## grok レビュアーのモデル解決 (`grok-model` — 正典)
+
+Step 5 の `grok` レビュアーに使わせる Grok のモデルを決める。`review-model` (Claude 側のレビュー系実行体) とは別の引数で、互いに影響しない。
+
+| 指定 | grok-rescue へ渡す依頼文 | 使われるモデル |
+|---|---|---|
+| 省略 (既定) | 先頭に `--model grok-4.7-build-fast` を付ける | `grok-4.7-build-fast` |
+| `grok-model=<モデル名>` (例: `grok-model=grok-4.7`。「grok は 4.7 で」等の自然言語も同義) | 先頭に `--model <モデル名>` を付ける | 指定モデル (grok-cc のエイリアス `fast` も可) |
+| `grok-model=default` | `--model` を付けない | Grok CLI の既定モデル |
+
+- 既定を `grok-4.7-build-fast` にするのは速度のため。同じレビューで Grok CLI 既定の grok-4.7 (effort high) より 3 割ほど短く、本物の指摘の拾い方はほぼ同等だった。grok-rescue の Bash 呼び出しには 600 秒の上限があり、超えるとレビュー結果が返らない。effort は下げない (medium では指摘の取りこぼしが明確に増えた)
+- 値の allowlist は本 SKILL に持たない (利用可能なモデルは `grok models` で環境ごとに変わる)。値が空なら実行せずエラーを報告して停止
+- 利用不可時: **明示した値**で Grok が起動できなかった (モデル不明等) 場合は、別モデルに差し替えず `grok: 利用不可 (grok-model=<値>)` として続行する。**既定**の `grok-4.7-build-fast` で起動できなかった場合は、同じラウンドで `--model` 無し (CLI 既定) で 1 回だけ再依頼し、最終報告に明記する
+- `.claude/workflow-cc.json` には入れない (`review-model` と同じ理由)
 
 ## 成功条件 (全部満たしたら success を返す)
 
@@ -373,7 +389,7 @@ EOF
 
 - **`project`**: `<R>` を起動し、その中で review skill を実行させる。使わせる skill は「リポジトリに project 用 review skill (`.claude/skills/code-review-project/` が慣例) があればそれ (Gotcha リスト等のリポジトリ固有知見を含むため素の公式 skill より優先)、無ければ公式 `/code-review`」の順で、**親が起動前に解決して prompt に名前で埋め込む** (子に探させない)。prompt には「自分では修正せず指摘を構造化して返せ」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 も入れる。subagent 経路が使えない環境では現セッションから Skill ツールで直接起動し「project: model/effort 未適用 (Skill 経路)」と最終報告に明記する。`/security-review` は **Step 3.6 で PR 作成前に実行済みのためここでは再実行しない** (二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 の規則に従い再実行する
 - **`codex`**: `Agent(subagent_type: "codex:codex-rescue")` — **`model` は渡さない** (実際にレビューするのは外部 CLI 側のエンジン)
-- **`grok`** (既定に含まれる): `Agent(subagent_type: "grok-cc:grok-rescue")` — 同上、`model` は渡さない
+- **`grok`** (既定に含まれる): `Agent(subagent_type: "grok-cc:grok-rescue")` — Agent の `model` は渡さない。Grok 側のモデルは「grok レビュアーのモデル解決」で決めた `--model` を依頼文の先頭に付けて渡す。依頼文には `--fresh` も付ける (前回の grok スレッドを誤って resume しないため)
 - **`adversarial`** (既定に含まれる): `<R>` で**実装とは独立したコンテキスト**の red-team レビューを起動する (実装した本人のコンテキストで自己批判させない — 自己整合バイアスで甘くなる)。prompt に埋め込む:
   - ローカル repo の絶対パス・レビュー対象ブランチ名・ベースブランチ名 (diff は `git diff <base>...<branch>` 等ローカル git で取らせる)
   - **Issue 本文の全文** (受け入れ条件込み)
@@ -420,6 +436,7 @@ EOF
 - レビュアーごとの指摘件数と採否。例: `project: must-fix 0・advisory 2 / adversarial: 2件 (採用1・却下1) / grok: 3件 (採用1・却下2) / codex: 利用不可`
 - レビューのラウンド数と方式 (例: `フル 1 + 差分照合 2`)
 - **レビュー系のモデル・effort の解決値と実際の適用状況**。例: `review: opus / effort high (既定・workflow-cc:reviewer) — simplify / security-review / project / adversarial に適用。grok は対象外 (外部エンジン)`。既定が利用不可で継承に落ちた場合・effort 未適用の経路 (general-purpose / code-simplifier) や Skill 経路に落ちたロールがある場合は必ずここに書く
+- **grok のモデル**。例: `grok: grok-4.7-build-fast (既定)`。既定が使えず CLI 既定で再依頼した場合・明示値で利用不可になった場合は必ずここに書く
 - 却下した指摘の理由 (簡潔に列挙)
 - 試行回数 (attempts)
 
@@ -445,6 +462,7 @@ EOF
 /implement-issue 42 review=project,adversarial   # grok を外す
 /implement-issue 42 review-model=sonnet          # レビュー系を sonnet (effort high) で回す (既定は opus / high)
 /implement-issue 42 review-model=inherit         # レビュー系もセッションのモデル・effort を継承
+/implement-issue 42 grok-model=grok-4.7          # grok レビュアーのモデルを指定 (既定は grok-4.7-build-fast)
 ```
 
 run-epic 経由 (推奨、main context 保護):
