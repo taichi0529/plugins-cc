@@ -9,7 +9,7 @@
 1. **PROGRESS.md 永続化フック 3 本** — セッションをまたいで「作業の現在地」を機械可読な `PROGRESS.md` に保つ。git / issue に載らない情報(plan との乖離・失敗したアプローチ・ハマりどころ・次の一手)だけを残す
 2. **ワークフロー skill 群** — `create-issue`(起票)/ `implement-issue`(単一 Issue の end-to-end 実装)/ `run-epic`(EPIC 配下の Sub-issues 直列実装)。すべてリポジトリ非依存
 
-ビルド・テストランナーはない。フックは shell + `jq`、skill は Markdown 手順書、agent 定義 (`agents/*.md`) は frontmatter でモデル / effort を固定するための薄いラッパ。確定済み設計判断(D1〜D24)とテスト計画は `docs/handoff.md` にある。
+ビルド・テストランナーはない。フックは shell + `jq`、skill は Markdown 手順書、agent 定義 (`agents/*.md`) は frontmatter でモデル / effort を固定するための薄いラッパ。確定済み設計判断(D1〜D25)とテスト計画は `docs/handoff.md` にある。
 
 ## opt-in の仕組み(D10)
 
