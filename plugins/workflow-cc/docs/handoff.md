@@ -67,7 +67,7 @@
 | D22 (v0.13.0) | **実装とレビューで effort を分ける**。本 plugin に agent 定義を 2 つ持つ: `agents/implementer.md` (`model: opus` / `effort: medium`) と `agents/reviewer.md` (`model: opus` / `effort: high`)。run-epic の子は `general-purpose` ではなく `workflow-cc:implementer` で spawn し、`model=` の既定を「セッション継承」から **opus / medium** に変える (`model=inherit` で旧挙動 = `general-purpose` でセッションのモデル・effort を継承)。implement-issue のレビュー系実行体 (simplify / security-review / project / adversarial) は `workflow-cc:reviewer` で起動し、既定を **opus / high** にする (`review-model=inherit` は `general-purpose` でセッション継承)。既定値は frontmatter に持たせ、既定経路では Agent 呼び出しに `model` を付けない。明示値は `model` パラメタで上書き (effort は frontmatter 固定のまま)。agent type が解決できない環境は `general-purpose` + `model` で起動し「effort 未適用」と報告する。直接起動の implement-issue の実装はセッション設定のまま (skill から切り替えない)。利用不可時の扱いは D15 / D20 と同じ (明示値は停止・既定は継承へ fail-open) | Agent 呼び出しで per-invocation に上書きできるのは `model` だけで、effort は agent 定義の frontmatter でしか指定できない — effort を制御するには plugin 側に agent 定義を持つしかない。実装は opus medium で十分な品質が出る一方、見落としの代償が大きいレビューには high を充てる。既定値を frontmatter に置くのは、呼び出し側が `model` を付け忘れても既定どおり動くようにするため (Agent の `model` パラメタが無視される不具合報告 anthropics/claude-code#83920 もあり、既定経路をパラメタ依存にしない)。skill frontmatter の `model` / `effort` は runtime に反映されない不具合報告 (#84262) があるため、直接起動の実装モデルを skill で切り替える方式は採らない |
 | D23 (v0.14.0) | Step 5 の grok レビュアーに渡す Grok のモデルを `grok-model=<名>` 引数で指定可能にし、**既定を `grok-4.7-build-fast`** とする。依頼文の先頭に `--model <名>` (と `--fresh`) を付けて grok-rescue に渡す。`grok-model=default` で `--model` を付けない (Grok CLI 既定)。`review-model` とは独立。明示値で起動できなければ差し替えず `grok: 利用不可`、既定で起動できなければ CLI 既定で 1 回だけ再依頼。run-epic はパススルー。設定ファイルには入れない | Grok CLI の既定が grok-4.7 に変わってからレビューが 7〜10 分かかるようになり、grok-rescue の Bash 上限 600 秒に迫っていた (超えると結果が返らない)。同じお題の計測 (各 1 回・2 本同時実行) で grok-4.7 high 460s / medium 356s / grok-4.7-build-fast high 301s / medium 138s。指摘は high の 2 本がほぼ同等で、medium は両モデルとも取りこぼしが明確に増えたため、effort は下げずにモデルで速度を取る。`review-model` と兼用しないのは、Claude のモデル名が grok に渡って壊れるため |
 | D24 (v0.15.0) | simplify (Step 3.5) の小 diff skip 閾値を **20 行未満 → 50 行未満** に引き上げる (D18 (3) の更新) | D18 の 20 行は実測の裏付けが無かった。実運用で simplify のコストは diff の大小にほぼ依存せず (4 観点の並列レビューを起動するため 1 回 1〜1.5 分・約 6 万トークン)、22 行の diff では 4 行の置き換え 1 件、51 行の diff では 2 件の整理と、小さい diff ほど成果が軽微だった。閾値を高めにして費用対効果を取る |
-| D25 (v0.15.1) | grok レビュアーへの依頼文に「外部 CLI を実際に起動せよ・起動できなければ『利用不可』とだけ返せ」を**入れない** (codex には従来どおり入れる)。起動できない場合の扱いは grok-rescue 側の約束 (`Grok unavailable: <理由>` の 1 行、代行しない) に任せ、implement-issue は「応答が `利用不可` / `Grok unavailable` で始まる、または Grok のセッション ID が無い」なら利用不可と判定する | grok-rescue は依頼文をそのまま Grok に転送するため、転送役への指示を Grok 自身が読み、自分の中から Grok CLI を再起動していた (実測: 余分なセッション 2 つ、「OK と返すだけ」が 20s → 91s)。grok-cc 0.1.4 で失敗時の応答形式が決まったので、指示文を送らなくても代行レビューは判別できる |
+| D25 (v0.16.0) | grok レビュアーは **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず、grok-cc の companion の `adversarial-review` サブコマンドを Bash で直接起動**する。場所は `claude plugin list --json` の `grok-cc@*` (有効) の `installPath` から解決。他レビュアーの Agent 呼び出しと同じメッセージ内で `run_in_background: true` で起動し、`--json` の出力 (`verdict` / `summary` / `findings[]`) を `jq` で読む。フルラウンドは `--base <base>` + Issue 本文をフォーカス文、差分照合ラウンドは `--base <前ラウンド HEAD>` + 前回指摘リスト。codex は従来どおり codex-rescue 経由 (エンジン実起動の明示を要求) | 転送役 (Sonnet) を挟むことで実測 3 種の不具合が出た: (1) `--model` を落とす (4 回中 1 回)、(2) Grok を起動せず自分で答える代行、(3) 転送役向けの「外部 CLI を起動せよ」を Grok 自身が読んで CLI を入れ子起動 (余分なセッション 2 つ・20s→91s)。companion 直接なら引数は決定的で、代行も混入も起きない。Bash の同期実行は 600 秒で打ち切られるので background にする (上限が無くなる)。`adversarial-review` は JSON Schema で出力を強制するので結果の読み取りも安定する (実測: grok-4.7-build-fast / high で 245s、parseError なし) |
 
 ---
 
@@ -243,7 +243,7 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
 - 指定された全レビュアーを**同一ターンで並列実行** (D21: 差分照合ラウンド・security-review 再実行も並列。全員の結果が揃ってからトリアージ):
   - `project` → `workflow-cc:reviewer` (D22) の中でリポジトリの review skill (フォールバック: 公式 `/code-review`)
   - `codex` → `Agent(subagent_type: "codex:codex-rescue")`
-  - `grok` → `Agent(subagent_type: "grok-cc:grok-rescue")`
+  - `grok` → grok-cc の companion `adversarial-review` を Bash (background) で直接起動 (D25)
   - `adversarial` → `Agent(subagent_type: "workflow-cc:reviewer")` (D22。opus / effort high) の red-team レビュー (D19。独立コンテキスト・
     破壊シナリオ必須・スタイル指摘とセキュリティ主目的は禁止)
 - **外部レビュアーには GitHub を参照させない** (実績のある罠: Codex 実行環境から GitHub API に
@@ -400,11 +400,21 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
 
 1. Phase 2 と同じ小さな issue 1 件で検証。
 2. 検証項目:
-   - [ ] `grok-model` 未指定で grok-rescue への依頼文の先頭に `--model grok-4.7-build-fast` が付き、`~/.grok/sessions` の該当セッションの `current_model_id` が `grok-4.7-build-fast` になる
+   - [ ] `grok-model` 未指定で companion に `--model grok-4.7-build-fast` が渡り、`~/.grok/sessions` の該当セッションの `current_model_id` が `grok-4.7-build-fast` になる
    - [ ] `grok-model=grok-4.7` で `--model grok-4.7` が付く。`grok-model=default` で `--model` が付かない
    - [ ] `review-model=sonnet` を指定しても grok のモデルは変わらない (逆も同様)
    - [ ] 存在しないモデルを `grok-model=` で明示すると、差し替えずに `grok: 利用不可` として続行し最終報告に出る
    - [ ] `/run-epic <N> grok-model=grok-4.7` で子の prompt に `grok-model = grok-4.7` が入る
+
+### Phase 11: grok を companion 直接起動に (v0.16.0 / D25)
+
+1. Phase 2 と同じ小さな issue 1 件で検証。
+2. 検証項目:
+   - [ ] Step 5 で grok が Agent ではなく Bash (`run_in_background: true`) の `grok-companion.mjs adversarial-review --base <base> --model grok-4.7-build-fast --json` として、他レビュアーの Agent 呼び出しと同じメッセージで起動される
+   - [ ] `~/.grok/sessions` に増えるセッションが 1 つだけ (入れ子起動なし) で、モデルが指定どおり
+   - [ ] 600 秒を超えても結果が回収される (background のため)
+   - [ ] grok-cc を無効化した環境で `grok: 利用不可 (grok-cc 未インストール)` として続行する
+   - [ ] 差分照合ラウンドで `--base <前ラウンド HEAD>` になる
 
 
 ### 全体の受け入れ条件
