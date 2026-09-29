@@ -14,8 +14,8 @@ for arg in "$@"; do
   esac
 done
 
-# 正常系の情報行。--quiet のときは出さない
-info() { [ "$quiet" -eq 1 ] || echo "$1"; }
+# stdout に出るのは OK / -- 行だけ (NG とエラーは stderr) なので、stdout ごと捨てる
+[ "$quiet" -eq 1 ] && exec >/dev/null
 
 command -v jq >/dev/null 2>&1 || { echo "jq が見つからない (brew install jq)" >&2; exit 2; }
 
@@ -51,7 +51,7 @@ while IFS="$SEP" read -r name kind source mversion; do
     continue
   fi
   if [ "$kind" = "external" ]; then
-    info "--  $name: ローカル以外の source なので対象外"
+    echo "--  $name: ローカル以外の source なので対象外"
     continue
   fi
   if [ "$kind" = "none" ] || [ -z "$source" ]; then
@@ -71,7 +71,7 @@ while IFS="$SEP" read -r name kind source mversion; do
     echo "NG  $name: marketplace.json=${mversion:-<なし>} plugin.json=${pversion:-<なし>}" >&2
     status=1
   else
-    info "OK  $name $pversion"
+    echo "OK  $name $pversion"
   fi
 done <<< "$ENTRIES"
 
