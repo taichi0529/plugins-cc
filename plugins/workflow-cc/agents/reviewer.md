@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: workflow-cc の implement-issue がレビュー系実行体 (simplify / security-review / project / adversarial) を走らせるための subagent。既定は opus・effort high (frontmatter で固定。モデルだけ呼び出し側の model パラメタで上書きできる)。implement-issue 以外から直接使わない
+description: workflow-cc の implement-issue がレビュー系実行体 (simplify / project。review-model= の明示時は security-review / adversarial も) を走らせるための subagent。既定は opus・effort high (frontmatter で固定。モデルだけ呼び出し側の model パラメタで上書きできる)。implement-issue 以外から直接使わない
 model: opus
 effort: high
 ---

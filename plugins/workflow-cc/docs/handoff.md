@@ -68,6 +68,8 @@
 | D23 (v0.14.0) | Step 5 の grok レビュアーに渡す Grok のモデルを `grok-model=<名>` 引数で指定可能にし、**既定を `grok-4.7-build-fast`** とする。依頼文の先頭に `--model <名>` (と `--fresh`) を付けて grok-rescue に渡す。`grok-model=default` で `--model` を付けない (Grok CLI 既定)。`review-model` とは独立。明示値で起動できなければ差し替えず `grok: 利用不可`、既定で起動できなければ CLI 既定で 1 回だけ再依頼。run-epic はパススルー。設定ファイルには入れない | Grok CLI の既定が grok-4.7 に変わってからレビューが 7〜10 分かかるようになり、grok-rescue の Bash 上限 600 秒に迫っていた (超えると結果が返らない)。同じお題の計測 (各 1 回・2 本同時実行) で grok-4.7 high 460s / medium 356s / grok-4.7-build-fast high 301s / medium 138s。指摘は high の 2 本がほぼ同等で、medium は両モデルとも取りこぼしが明確に増えたため、effort は下げずにモデルで速度を取る。`review-model` と兼用しないのは、Claude のモデル名が grok に渡って壊れるため |
 | D24 (v0.15.0) | simplify (Step 3.5) の小 diff skip 閾値を **20 行未満 → 50 行未満** に引き上げる (D18 (3) の更新) | D18 の 20 行は実測の裏付けが無かった。実運用で simplify のコストは diff の大小にほぼ依存せず (4 観点の並列レビューを起動するため 1 回 1〜1.5 分・約 6 万トークン)、22 行の diff では 4 行の置き換え 1 件、51 行の diff では 2 件の整理と、小さい diff ほど成果が軽微だった。閾値を高めにして費用対効果を取る |
 | D25 (v0.16.0) | grok レビュアーは **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず、grok-cc の companion の `adversarial-review` サブコマンドを Bash で直接起動**する。場所は `claude plugin list --json` の `grok-cc@*` (有効) の `installPath` から解決。他レビュアーの Agent 呼び出しと同じメッセージ内で `run_in_background: true` で起動し、`--json` の出力 (`verdict` / `summary` / `findings[]`) を `jq` で読む。フルラウンドは `--base <base>` + Issue 本文をフォーカス文、差分照合ラウンドは `--base <前ラウンド HEAD>` + 前回指摘リスト。codex は従来どおり codex-rescue 経由 (エンジン実起動の明示を要求) | 転送役 (Sonnet) を挟むことで実測 3 種の不具合が出た: (1) `--model` を落とす (4 回中 1 回)、(2) Grok を起動せず自分で答える代行、(3) 転送役向けの「外部 CLI を起動せよ」を Grok 自身が読んで CLI を入れ子起動 (余分なセッション 2 つ・20s→91s)。companion 直接なら引数は決定的で、代行も混入も起きない。Bash の同期実行は 600 秒で打ち切られるので background にする (上限が無くなる)。`adversarial-review` は JSON Schema で出力を強制するので結果の読み取りも安定する (実測: grok-4.7-build-fast / high で 245s、parseError なし) |
+| D26 (v0.16.1) | 差分照合ラウンドで grok に渡す前回の採用指摘リストは、指摘ごとに **Grok 自身の出力 (`severity` / `title` / `file`:`line_start`-`line_end` / `body` / `recommendation`) を原文のまま**埋め込み、直後に「行った修正」を 1〜2 行で添える。要約・言い換えはしない。セッションの resume はしない | grok は毎ラウンド新規セッションで前回の記憶が無い。要約した指摘文だけでは「なぜ問題だと判断したか」が落ち、修正が指摘の意図に沿うかの判定が甘くなる。resume は履歴の再入力でトークンが増えるうえ、前回の自分の指摘への同調と、修正前のファイル内容の記憶による誤判定を招くため採らない |
+| D27 (v0.17.0) | implement-issue のレビュー系 4 ロールのうち **security-review (Step 3.6) と adversarial (Step 5) の既定を fable / effort high** にする。agent 定義 `agents/critical-reviewer.md` (`model: fable` / `effort: high`) を追加し、既定経路ではこの 2 ロールを `workflow-cc:critical-reviewer` (`model` パラメタ無し) で起動する。simplify / project の既定は `workflow-cc:reviewer` (opus / high) のまま。`review-model=<名>` の明示値は従来どおり 4 ロール共通に効き (`workflow-cc:reviewer` + `model`)、`review-model=inherit` も 4 ロール共通。利用不可時は fail-open を 1 段増やす: 既定の fable が拒否されたら同じロールを `workflow-cc:reviewer` (opus / high) で再試行し、それも不可なら継承へ。`critical-reviewer` だけが解決できない環境は `workflow-cc:reviewer` + `model: "fable"`。run-epic はパススルーのまま (未指定時に子へ渡す文字列だけロール別の既定に更新) | 脆弱性の見落としと機能破壊の見落としは、そのまま merge に乗るため代償が特に大きい — この 2 ロールに上位モデルを充てる。整理 (simplify) と規約照合 (project) まで fable にはしない。`model` パラメタで渡さず agent 定義を足すのは D22 と同じ理由 (既定経路をパラメタ依存にしない。Agent の `model` パラメタが無視されると黙って opus で動き、気づけない)。ロール別の引数 (`security-model=` 等) は増やさない — 明示したい場合は `review-model=` で 4 ロールまとめて指定すれば足りる |
 
 ---
 
@@ -79,7 +81,8 @@
 │ ├── .claude-plugin/plugin.json                            │
 │ ├── agents/                                               │
 │ │   ├── implementer.md        # run-epic の子 (opus/medium)│
-│ │   └── reviewer.md           # レビュー系 (opus/high)     │
+│ │   ├── reviewer.md           # レビュー系 (opus/high)     │
+│ │   └── critical-reviewer.md  # 重要ロール (fable/high)    │
 │ ├── skills/                                               │
 │ │   ├── implement-issue/SKILL.md                          │
 │ │   ├── run-epic/SKILL.md                                 │
@@ -244,7 +247,7 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
   - `project` → `workflow-cc:reviewer` (D22) の中でリポジトリの review skill (フォールバック: 公式 `/code-review`)
   - `codex` → `Agent(subagent_type: "codex:codex-rescue")`
   - `grok` → grok-cc の companion `adversarial-review` を Bash (background) で直接起動 (D25)
-  - `adversarial` → `Agent(subagent_type: "workflow-cc:reviewer")` (D22。opus / effort high) の red-team レビュー (D19。独立コンテキスト・
+  - `adversarial` → `Agent(subagent_type: "workflow-cc:critical-reviewer")` (D27。fable / effort high) の red-team レビュー (D19。独立コンテキスト・
     破壊シナリオ必須・スタイル指摘とセキュリティ主目的は禁止)
 - **外部レビュアーには GitHub を参照させない** (実績のある罠: Codex 実行環境から GitHub API に
   接続できず issue 本文を取得できなかった)。prompt に**ローカル repo パス + ブランチ名 +
@@ -387,7 +390,7 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
 
 1. Phase 2 と同じ小さな issue 1 件 + Phase 5 と同じ小さな EPIC で検証。`/reload-plugins` 後に `/agents` で `workflow-cc:implementer` / `workflow-cc:reviewer` が見えることを先に確認する。
 2. 検証項目:
-   - [ ] `/implement-issue <N>` で simplify / security-review / project / adversarial が `subagent_type: "workflow-cc:reviewer"` かつ `model` パラメタ無しで起動され、opus / effort high で動く
+   - [ ] `/implement-issue <N>` で simplify / security-review / project / adversarial が `subagent_type: "workflow-cc:reviewer"` かつ `model` パラメタ無しで起動され、opus / effort high で動く (v0.17.0 以降、security-review / adversarial は `workflow-cc:critical-reviewer` = fable / effort high — Phase 13)
    - [ ] `review-model=sonnet` で上記 4 ロールが `workflow-cc:reviewer` + `model: "sonnet"` で起動される (effort は high のまま)
    - [ ] `review-model=inherit` で上記 4 ロールが `general-purpose` + `model` 無しで起動される
    - [ ] subagent 内で `simplify` が解決できない環境で `code-simplifier:code-simplifier` に落ち、「effort high 未適用」が最終報告に出る
@@ -415,6 +418,26 @@ command は `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.sh` (または .py) を指す�
    - [ ] 600 秒を超えても結果が回収される (background のため)
    - [ ] grok-cc を無効化した環境で `grok: 利用不可 (grok-cc 未インストール)` として続行する
    - [ ] 差分照合ラウンドで `--base <前ラウンド HEAD>` になる
+
+### Phase 12: 差分照合ラウンドに Grok の元の根拠を埋め込む (v0.16.1 / D26)
+
+1. grok が 1 件以上の採用指摘を出す issue で検証。
+2. 検証項目:
+   - [ ] 差分照合ラウンドのフォーカス文に、採用指摘ごとの `severity` / `title` / `file`:行 / `body` / `recommendation` が Grok の原文のまま入っている (`~/.grok/sessions` の該当セッションの最初の user メッセージで確認)
+   - [ ] 各指摘の直後に「行った修正」が添えられている
+   - [ ] 却下した指摘の原文は埋め込まれない
+
+### Phase 13: security-review / adversarial の既定を fable に (v0.17.0 / D27)
+
+1. Phase 2 と同じ小さな issue 1 件で検証。`/reload-plugins` 後に `/agents` で `workflow-cc:critical-reviewer` が見えることを先に確認する。
+2. 検証項目:
+   - [ ] `/implement-issue <N>` で security-review / adversarial が `subagent_type: "workflow-cc:critical-reviewer"` かつ `model` パラメタ無しで起動され、fable / effort high で動く
+   - [ ] 同じ実行で simplify / project は `workflow-cc:reviewer` (opus / effort high) のまま
+   - [ ] `review-model=sonnet` で 4 ロールとも `workflow-cc:reviewer` + `model: "sonnet"` で起動される (security-review / adversarial も fable にならない)
+   - [ ] `review-model=inherit` で 4 ロールとも `general-purpose` + `model` 無しで起動される
+   - [ ] fable が使えない環境で security-review / adversarial が `workflow-cc:reviewer` (opus / high) に落ちて続行し、最終報告に出る
+   - [ ] 最終報告にロールごとの適用モデル (opus / fable) が分かれて出る
+   - [ ] `/run-epic <N>` (review-model 未指定) の子でも同じロール別の既定が効く
 
 
 ### 全体の受け入れ条件

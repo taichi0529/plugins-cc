@@ -11,7 +11,7 @@ GitHub Issue の実装を、ブランチ作成から PR 作成・レビュー対
 引数: `$ARGUMENTS`
 - 第1引数: Issue 番号 (例: `42`, `#42`)
 - 任意: `review=<reviewer,...>` (例: `review=codex,grok`)。省略時の既定は `project,adversarial,grok`。自然言語での指定 (「codex でもレビューして」) も同義に解釈する
-- 任意: `review-model=<モデル名>` (例: `review-model=sonnet`)。レビュー系実行体 (Step 3.5 / 3.6 / 5) を走らせるモデル。省略時の既定は **`opus` (effort high)**。詳細は「レビュー系実行体のモデル解決」を参照
+- 任意: `review-model=<モデル名>` (例: `review-model=sonnet`)。レビュー系実行体 (Step 3.5 / 3.6 / 5) を走らせるモデル。省略時の既定はロール別で、**security-review / adversarial は `fable`、simplify / project は `opus`** (effort はどれも high)。指定すると 4 ロールすべてがそのモデルになる。詳細は「レビュー系実行体のモデル解決」を参照
 - 任意: `grok-model=<モデル名>` (例: `grok-model=grok-4.7`)。Step 5 の grok レビュアーに使わせる Grok のモデル。省略時の既定は **`grok-4.7-build-fast`**。詳細は「grok レビュアーのモデル解決」を参照
 - **`model=` は受け付けない**。指定された場合は実行せず「implement-issue に `model=` は無い。レビュー系のモデルは `review-model=`、run-epic の子エージェントのモデルは run-epic 側の `model=`」と報告して停止する (黙って `review-model` と読み替えない)
 
@@ -100,15 +100,18 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 
 レビュー系実行体は本 plugin の **`workflow-cc:reviewer` agent** で起動する。その frontmatter が既定値を持つ: **`model: opus` / `effort: high`**。レビューは見落としの代償が大きく、実装より高い effort を充てる価値があるため。Agent 呼び出しで上書きできるのは `model` だけで、effort は frontmatter で固定される (変えたい場合は `agents/reviewer.md` を編集する)。
 
+**security-review (Step 3.6) と adversarial (Step 5) の 2 ロールだけは、既定で別の agent 定義 `workflow-cc:critical-reviewer` (frontmatter: `model: fable` / `effort: high`) で起動する**。脆弱性と機能破壊という、見落としがそのまま merge に乗るロールに上位モデルを充てる。simplify / project は `workflow-cc:reviewer` の opus のまま。fable を `model` パラメタで渡さず agent 定義に持たせるのは reviewer と同じ理由 (既定経路をパラメタ依存にしない)。
+
 ### 値の解決と起動の形
 
-| 指定 | 起動の形 | モデル / effort |
-|---|---|---|
-| 省略 (既定) | `Agent(subagent_type: "workflow-cc:reviewer")` — `model` パラメタは付けない | opus / high |
-| `review-model=<モデル名>` (例: `review-model=sonnet`。「レビューは sonnet で」等の自然言語も同義) | `Agent(subagent_type: "workflow-cc:reviewer", model: "<モデル名>")` | 指定モデル / high |
-| `review-model=inherit` | `Agent(subagent_type: "general-purpose")` — `model` パラメタは付けない | セッション (子エージェント) のモデル・effort をそのまま継承 |
+| 指定 | 対象ロール | 起動の形 | モデル / effort |
+|---|---|---|---|
+| 省略 (既定) | simplify / project | `Agent(subagent_type: "workflow-cc:reviewer")` — `model` パラメタは付けない | opus / high |
+| 省略 (既定) | security-review / adversarial | `Agent(subagent_type: "workflow-cc:critical-reviewer")` — `model` パラメタは付けない | fable / high |
+| `review-model=<モデル名>` (例: `review-model=sonnet`。「レビューは sonnet で」等の自然言語も同義) | 4 ロール共通 (security-review / adversarial も指定モデルになる) | `Agent(subagent_type: "workflow-cc:reviewer", model: "<モデル名>")` | 指定モデル / high |
+| `review-model=inherit` | 4 ロール共通 | `Agent(subagent_type: "general-purpose")` — `model` パラメタは付けない | セッション (子エージェント) のモデル・effort をそのまま継承 |
 
-以下、この表で決まった起動の形を **`<R>`** と書く。
+以下、この表で**ロールごとに**決まった起動の形を **`<R>`** と書く (既定では security-review / adversarial の `<R>` だけが `workflow-cc:critical-reviewer` になる)。
 
 - 値の allowlist は本 SKILL に持たない (利用可能なモデル名は harness 側の事実で環境ごとに変わる。代表例: `haiku` / `sonnet` / `opus` / `fable`)。値が空なら実行せずエラーを報告して停止
 - `.claude/workflow-cc.json` には**入れない**。モデル選択は個人・コスト都合であってリポジトリの事実ではない (run-epic の `model=` と同じ理由)
@@ -118,8 +121,10 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 | 状況 | 挙動 |
 |---|---|
 | **`review-model=` で明示した値**の spawn が拒否された | **フォールバックせず停止**し「review-model=<値> が環境で利用不可」と報告する |
-| **既定**の spawn がモデル起因で拒否された (opus が使えない環境) | **停止しない**。`Agent(subagent_type: "general-purpose")` (モデル・effort 継承) で即座に再試行し、最終報告に「review-model 既定の opus が利用不可のため継承で実行」と明記する |
-| `workflow-cc:reviewer` が agent type として解決できない (plugin の読み込み不備等) | `general-purpose` に同じ prompt を渡して起動する。既定なら `model: "opus"`、明示値ならその値を付ける。この経路は **effort 未適用**として最終報告に明記する |
+| **既定の fable** (security-review / adversarial の `workflow-cc:critical-reviewer`) の spawn がモデル起因で拒否された | **停止しない**。同じロールを `Agent(subagent_type: "workflow-cc:reviewer")` (`model` 無し = opus / high) で即座に再試行し、最終報告に「<ロール>: 既定の fable が利用不可のため opus / high で実行」と明記する。それも拒否されたら次の行に進む |
+| **既定の opus** の spawn がモデル起因で拒否された (opus が使えない環境。fable から落ちてきた再試行を含む) | **停止しない**。`Agent(subagent_type: "general-purpose")` (モデル・effort 継承) で即座に再試行し、最終報告に「review-model 既定の opus が利用不可のため継承で実行」と明記する |
+| `workflow-cc:critical-reviewer` だけが agent type として解決できない (plugin の更新が未反映等) | `Agent(subagent_type: "workflow-cc:reviewer", model: "fable")` で起動する (fable / high は保てる)。最終報告に明記する |
+| `workflow-cc:reviewer` が agent type として解決できない (plugin の読み込み不備等) | `general-purpose` に同じ prompt を渡して起動する。既定ならそのロールの既定モデル (`model: "opus"`。security-review / adversarial は `model: "fable"`)、明示値ならその値を付ける。この経路は **effort 未適用**として最終報告に明記する |
 
 「ユーザーが選んだ値を黙って別物に差し替えない」と「ユーザーが選んでいない既定で本体のループを止めない」を両立させる (後者は Step 3.5 / 3.6 の fail-open と同じ思想)。
 
@@ -128,13 +133,13 @@ Step 3.5 (`/simplify`) / Step 3.6 (`/security-review`) / Step 5 (project・adver
 | ロール | 実行体 | 適用 |
 |---|---|---|
 | simplify (Step 3.5) | `<R>` の中で Skill ツールから `simplify` を起動させる。subagent 内で `simplify` が解決できなければ `Agent(subagent_type: "code-simplifier:code-simplifier")` (明示値があれば `model` も付ける)、それも無ければ Skill ツールで `simplify` を現セッションから起動 | `<R>` 経路は両方。code-simplifier 経路は model のみ (effort は同 agent の定義次第)。Skill 直接経路はどちらも未適用 |
-| security-review (Step 3.6) | `<R>` の中で Skill ツールから `security-review` を起動させる | 両方 |
+| security-review (Step 3.6) | `<R>` (既定は `workflow-cc:critical-reviewer` = fable / high) の中で Skill ツールから `security-review` を起動させる | 両方 |
 | project (Step 5) | `<R>` の中で、リポジトリの review skill / 公式 `/code-review` を起動させる | 両方 (公式 `/code-review` が内部でさらに fork する分までは制御できない) |
-| adversarial (Step 5) | `<R>` | 両方 |
+| adversarial (Step 5) | `<R>` (既定は `workflow-cc:critical-reviewer` = fable / high) | 両方 |
 | codex (Step 5) | `Agent(subagent_type: "codex:codex-rescue")` | **対象外** — 実際にレビューするのは外部 CLI 側のエンジン。`review-model` は渡さない |
 | grok (Step 5) | grok-cc の companion を Bash で直接起動 (「grok レビュアーの実行」) | **対象外** — Grok のモデルは「grok レビュアーのモデル解決」の `grok-model` で決める |
 
-**最終報告に「どのロールにどのモデル・effort が実際に適用されたか」を書く** (適用できなかったロールは理由付きで)。ここを書かないと「opus high でレビューしたつもりが継承モデルだった」という取り違えが検出できない。
+**最終報告に「どのロールにどのモデル・effort が実際に適用されたか」を書く** (適用できなかったロールは理由付きで)。ここを書かないと「fable high でレビューしたつもりが opus や継承モデルだった」という取り違えが検出できない。
 
 ## grok レビュアーのモデル解決 (`grok-model` — 正典)
 
@@ -301,7 +306,7 @@ git checkout -b <type>/<kebab-summary>
 
 Step 3.5 の直後に実行する。**HIGH / MEDIUM の未対応指摘が 0 件になるまで PR を作成しない** (push 前に検出するのが目的 — PR 後の指摘は公開済みコードへの後追いになる)。
 
-1. 「レビュー系実行体のモデル解決」で決めた `<R>` の subagent 内で公式 `/security-review` を起動する:
+1. 「レビュー系実行体のモデル解決」で決めた `<R>` (既定は `Agent(subagent_type: "workflow-cc:critical-reviewer")` = fable / effort high) の subagent 内で公式 `/security-review` を起動する:
    - `<R>` を起動し、prompt に埋め込む: 「**Skill ツールで `security-review` を起動**し、その指摘 (深刻度 / 対象ファイル:行 / 根拠 / 修正案) を構造化して返せ。**自分では修正しない** (採否は呼び出し元が判断する)」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 (対象は現在のブランチと `<base>` の diff)
    - subagent 内から `security-review` が解決できなかった場合はその旨を返させ、**現セッションから Skill ツールで直接起動**する (この経路ではモデル・effort とも未適用 — 最終報告に明記)
    - 副次的な利点: レポートが tool result として返るため、下記 6 の「レビューレポートを自分の最終応答にしてしまう」事故が構造的に起きにくくなる
@@ -386,7 +391,7 @@ EOF
 
 指定された全レビュアーを上記の原則どおり**同一ターンで並列実行**する (最新 HEAD に対して)。
 
-`<R>` は「レビュー系実行体のモデル解決」で決めた起動の形 (既定は `Agent(subagent_type: "workflow-cc:reviewer")` = opus / effort high):
+`<R>` は「レビュー系実行体のモデル解決」でロールごとに決めた起動の形 (既定は project が `Agent(subagent_type: "workflow-cc:reviewer")` = opus / effort high、adversarial が `Agent(subagent_type: "workflow-cc:critical-reviewer")` = fable / effort high):
 
 - **`project`**: `<R>` を起動し、その中で review skill を実行させる。使わせる skill は「リポジトリに project 用 review skill (`.claude/skills/code-review-project/` が慣例) があればそれ (Gotcha リスト等のリポジトリ固有知見を含むため素の公式 skill より優先)、無ければ公式 `/code-review`」の順で、**親が起動前に解決して prompt に名前で埋め込む** (子に探させない)。prompt には「自分では修正せず指摘を構造化して返せ」+ リポジトリの絶対パス + ベースブランチ名 + 本ブランチ名 も入れる。subagent 経路が使えない環境では現セッションから Skill ツールで直接起動し「project: model/effort 未適用 (Skill 経路)」と最終報告に明記する。`/security-review` は **Step 3.6 で PR 作成前に実行済みのためここでは再実行しない** (二重実行の廃止)。ただしレビュー対応でセキュリティに敏感な変更を加えた場合は Step 3.6 の規則に従い再実行する
 - **`codex`**: `Agent(subagent_type: "codex:codex-rescue")` — **`model` は渡さない** (実際にレビューするのは外部 CLI 側のエンジン)
@@ -415,9 +420,9 @@ grok は **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず**、grok-
    ```
    - `--base`: フルラウンドは `<base>` (ベースブランチ)、差分照合ラウンドは前ラウンドの HEAD SHA (= 修正 diff だけが対象になる)
    - `--model`: 「grok レビュアーのモデル解決」で決めた値。`grok-model=default` なら付けない
-   - フォーカス文: フルラウンドは「Issue #<N> の受け入れ条件に照らしてレビューせよ」+ **Issue 本文の全文**。差分照合ラウンドは「前ラウンドの指摘が解消されたか、修正 diff 自体に新たな問題が無いかだけを判定せよ」+ 前ラウンドの採用指摘リスト
+   - フォーカス文: フルラウンドは「Issue #<N> の受け入れ条件に照らしてレビューせよ」+ **Issue 本文の全文**。差分照合ラウンドは「前ラウンドの指摘が解消されたか、修正 diff 自体に新たな問題が無いかだけを判定せよ」+ 前ラウンドの採用指摘リスト。**採用指摘は 1 件ごとに Grok 自身の出力を原文のまま埋め込む** — `severity` / `title` / `file`:`line_start`-`line_end` / `body` / `recommendation`。要約・言い換えはしない (Grok は毎ラウンド新規セッションで前回の記憶が無く、要約すると「なぜ問題だと判断したか」が落ちて解消判定が甘くなる)。各指摘の直後に「行った修正」を 1〜2 行で添える
    - diff は companion がローカル git から集める (GitHub は参照しない)。レビュー中は**作業ツリーを書き換えない** (Grok は作業ツリーを読む)
-3. **結果を読む**: `<out>/grok.json` を `jq` で読む。`.grok.status == 0` かつ `.parseError == null` なら成功で、`.result.verdict` (`approve` / `needs-attention`)、`.result.summary`、`.result.findings[]` (`file` / `line_start` / `line_end` / `confidence` (0〜1) / `recommendation` 等) を使う。それ以外 (JSON が空・非 0 終了・parseError) は `grok: 利用不可 (<grok.log の要点>)`。読み終えたら `rm -f <out>/grok.json <out>/grok.log && rmdir <out>` で片付ける (`rm -rf` は権限設定で拒否されやすいため使わない)
+3. **結果を読む**: `<out>/grok.json` を `jq` で読む。`.grok.status == 0` かつ `.parseError == null` なら成功で、`.result.verdict` (`approve` / `needs-attention`)、`.result.summary`、`.result.findings[]` (`file` / `line_start` / `line_end` / `confidence` (0〜1) / `recommendation` 等) を使う。それ以外 (JSON が空・非 0 終了・parseError) は `grok: 利用不可 (<grok.log の要点>)`。**`findings[]` は各フィールドを原文のまま読み出して控える** (採用した指摘は次の差分照合ラウンドのフォーカス文にそのまま埋め込むため。`jq -r '.result.findings[] | "[\(.severity)] \(.title)\n\(.file):\(.line_start)-\(.line_end)\n\(.body)\n推奨: \(.recommendation)\n"'` 等)。読み終えたら `rm -f <out>/grok.json <out>/grok.log && rmdir <out>` で片付ける (`rm -rf` は権限設定で拒否されやすいため使わない)
 
 **codex には GitHub を参照させない** (実行環境から GitHub API に届かない実績のある罠)。prompt に以下を直接埋め込む:
 
@@ -457,7 +462,7 @@ grok は **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず**、grok-
 - `trustCI` の扱い (true なら `gh pr checks` の結果、false なら「CI 不参照」)
 - レビュアーごとの指摘件数と採否。例: `project: must-fix 0・advisory 2 / adversarial: 2件 (採用1・却下1) / grok: 3件 (採用1・却下2) / codex: 利用不可`
 - レビューのラウンド数と方式 (例: `フル 1 + 差分照合 2`)
-- **レビュー系のモデル・effort の解決値と実際の適用状況**。例: `review: opus / effort high (既定・workflow-cc:reviewer) — simplify / security-review / project / adversarial に適用。grok は対象外 (外部エンジン)`。既定が利用不可で継承に落ちた場合・effort 未適用の経路 (general-purpose / code-simplifier) や Skill 経路に落ちたロールがある場合は必ずここに書く
+- **レビュー系のモデル・effort の解決値と実際の適用状況**。例: `review: opus / effort high (既定・workflow-cc:reviewer) — simplify / project に適用。fable / effort high (既定・workflow-cc:critical-reviewer) — security-review / adversarial に適用。grok は対象外 (外部エンジン)`。既定が利用不可で opus や継承に落ちた場合・effort 未適用の経路 (general-purpose / code-simplifier) や Skill 経路に落ちたロールがある場合は必ずここに書く
 - **grok のモデル**。例: `grok: grok-4.7-build-fast (既定)`。既定が使えず CLI 既定で再依頼した場合・明示値で利用不可になった場合は必ずここに書く
 - 却下した指摘の理由 (簡潔に列挙)
 - 試行回数 (attempts)
@@ -473,7 +478,7 @@ grok は **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず**、grok-
 - **変更は Issue スコープ最小限**。周辺の整理整頓を PR に混ぜない
 - **`max_attempts = 10` を超えたら必ず failure を return**。無限ループは禁止 (リトライ判断は呼び出し元に委ねる)
 - **解決済みローカルゲートは必ず pass してから PR を作成・更新する**
-- **`review-model=` で明示された値が使えないときに、黙って別のモデルへ落とさない** (停止して報告する)。逆に既定 (opus / effort high) が使えないだけで本体のループを止めない (継承で続行し報告に明記)
+- **`review-model=` で明示された値が使えないときに、黙って別のモデルへ落とさない** (停止して報告する)。逆に既定 (opus / fable・effort high) が使えないだけで本体のループを止めない (fable は opus へ、opus は継承へ落として続行し報告に明記)
 
 ## 起動例
 
@@ -482,7 +487,7 @@ grok は **LLM の転送役 (`grok-cc:grok-rescue` agent) を通さず**、grok-
 /implement-issue 42
 /implement-issue 42 review=codex,grok             # レビュアーを明示 (既定は project,adversarial,grok)
 /implement-issue 42 review=project,adversarial   # grok を外す
-/implement-issue 42 review-model=sonnet          # レビュー系を sonnet (effort high) で回す (既定は opus / high)
+/implement-issue 42 review-model=sonnet          # レビュー系 4 ロールを sonnet (effort high) で回す (既定は opus / high。security-review / adversarial は fable / high)
 /implement-issue 42 review-model=inherit         # レビュー系もセッションのモデル・effort を継承
 /implement-issue 42 grok-model=grok-4.7          # grok レビュアーのモデルを指定 (既定は grok-4.7-build-fast)
 ```
