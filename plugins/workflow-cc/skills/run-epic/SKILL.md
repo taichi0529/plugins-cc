@@ -32,8 +32,8 @@ EPIC issue にぶら下がる **Sub-issues を実装するオーケストレー�
   - 設定ファイル (`.claude/workflow-cc.json`) には入れない — `parallel` と同じ理由 (モデル選択は個人・コスト都合。D15)
 - 任意: `review-model=<モデル名>` (例: `252 review-model=sonnet`)。他の引数と順不同で併用可
   - **子が回すレビュー系実行体** (implement-issue の Step 3.5 `/simplify` / Step 3.6 `/security-review` / Step 5 の project・adversarial) のモデル。**`model=` とは別物** — `model=` は子エージェント本体 (実装する主体)、`review-model=` は子がさらに起動するレビュー系 subagent
-  - 親は値を解釈せず**そのまま子の prompt に埋め込む**。解決規則と既定値 (**`opus` / effort high**)・利用不可時の扱いは implement-issue SKILL.md の「レビュー系実行体のモデル解決」が正典
-  - 省略時は子側の既定 (`opus` / effort high) が効く。レビューも子と同じモデル・effort で回したいなら `review-model=inherit` を明示する
+  - 親は値を解釈せず**そのまま子の prompt に埋め込む**。解決規則と既定値 (**security-review / adversarial は `fable`、simplify / project は `opus`。effort はどれも high**)・利用不可時の扱いは implement-issue SKILL.md の「レビュー系実行体のモデル解決」が正典
+  - 省略時は子側のロール別の既定 (上記) が効く。レビューも子と同じモデル・effort で回したいなら `review-model=inherit` を明示する
   - 外部レビュアー (codex / grok) には適用されない (レビューするのは外部 CLI 側のエンジン)
   - `model=` と同じく設定ファイルには入れない
 - 任意: `grok-model=<モデル名>` (例: `252 grok-model=grok-4.7`)。他の引数と順不同で併用可
@@ -173,7 +173,7 @@ spawn 前にバッチ共通の準備を親が行う:
 - `isolation`: `"worktree"` (必須 — 親の cwd を汚さない)
 - `model`: `model=<モデル名>` の指定時のみその値を渡す。未指定・`inherit` なら**このパラメタ自体を付与しない** (未指定 = frontmatter の opus、`inherit` = セッションモデル)。**`review-model=` の値をここに渡してはいけない** (別物)
 - `description`: `Issue #<N> 実装 + ローカルゲート pass + PR 作成`
-- `prompt`: 下記テンプレ (`<N>` = Sub-issue 番号、`<base>` = ベースブランチ、`<SKILL_PATH>` = 親が解決した implement-issue SKILL.md の絶対パス、`<assigned-branch>` = 親が割り当てたブランチ名、`<BASE_SHA>` = 捕捉した base SHA、`<REVIEW_MODEL>` = `review-model=` の値 (未指定なら文字列 `既定 (opus / effort high)`)、`<GROK_MODEL>` = `grok-model=` の値 (未指定なら文字列 `既定 (grok-4.7-build-fast)`)、に置換)
+- `prompt`: 下記テンプレ (`<N>` = Sub-issue 番号、`<base>` = ベースブランチ、`<SKILL_PATH>` = 親が解決した implement-issue SKILL.md の絶対パス、`<assigned-branch>` = 親が割り当てたブランチ名、`<BASE_SHA>` = 捕捉した base SHA、`<REVIEW_MODEL>` = `review-model=` の値 (未指定なら文字列 `既定 (security-review / adversarial は fable、simplify / project は opus。effort はどれも high)`)、`<GROK_MODEL>` = `grok-model=` の値 (未指定なら文字列 `既定 (grok-4.7-build-fast)`)、に置換)
 
 ```
 あなたはこのリポジトリの実装エージェントです。
@@ -323,7 +323,7 @@ ready-set のバッチ列を処理し切ったら:
    ```
 
 2. ユーザーへの最終報告:
-   - EPIC #$ARGUMENTS の処理サマリ / 実装 Sub-issue 数 / 使用した parallel / 子のモデル・effort (未指定なら「既定 opus / medium」、`inherit` なら「セッション継承」。フォールバックが起きたらその旨) / review-model 値 (未指定なら「既定 opus / high」) / grok-model 値 (未指定なら「既定 grok-4.7-build-fast」) と、子から集めた実際の適用状況
+   - EPIC #$ARGUMENTS の処理サマリ / 実装 Sub-issue 数 / 使用した parallel / 子のモデル・effort (未指定なら「既定 opus / medium」、`inherit` なら「セッション継承」。フォールバックが起きたらその旨) / review-model 値 (未指定なら「既定 opus / high・security-review と adversarial は fable / high」) / grok-model 値 (未指定なら「既定 grok-4.7-build-fast」) と、子から集めた実際の適用状況
    - バッチ構成と根拠 (parallel ≥ 2 のとき)・依存 merge 待ちで未処理の子
    - config_source (workflow-cc / auto-derive) と旧 `.claude/workflow.json` 検出時のリネーム案内 (該当時)
    - 全 PR URL (merge 待ちリスト、対応する `Closes #<N>` 付き)
@@ -365,4 +365,4 @@ ready-set のバッチ列を処理し切ったら:
 /run-epic 252 grok-model=grok-4.7
 ```
 
-→ EPIC #252 の OPEN な Sub-issues を処理し、各 PR を作成して merge 待ちにする。既定は上から順の直列。`parallel=2` では独立性トリアージで並列可と判定された子だけを最大 2 体ずつ同時実行する。子エージェントは既定で opus / effort medium で動き、`model=sonnet` を足すと sonnet / medium になる (`model=inherit` でセッションのモデル・effort を継承)。子が回すレビュー系 (simplify / security-review / project / adversarial) は既定で opus / effort high — 「実装は opus medium・レビューは opus high」が既定形。`review-model=sonnet` 等でレビュー側のモデルだけ変えられる。途中で停止した場合は、原因を直してから同じコマンドを再実行すれば、未処理 (OPEN かつ verified-ready な PR を持たない) の Sub-issue から再開する。
+→ EPIC #252 の OPEN な Sub-issues を処理し、各 PR を作成して merge 待ちにする。既定は上から順の直列。`parallel=2` では独立性トリアージで並列可と判定された子だけを最大 2 体ずつ同時実行する。子エージェントは既定で opus / effort medium で動き、`model=sonnet` を足すと sonnet / medium になる (`model=inherit` でセッションのモデル・effort を継承)。子が回すレビュー系は既定で effort high — simplify / project は opus、security-review / adversarial は fable。「実装は opus medium・レビューは opus high (security-review と adversarial だけ fable high)」が既定形。`review-model=sonnet` 等でレビュー側のモデルだけ変えられる。途中で停止した場合は、原因を直してから同じコマンドを再実行すれば、未処理 (OPEN かつ verified-ready な PR を持たない) の Sub-issue から再開する。
